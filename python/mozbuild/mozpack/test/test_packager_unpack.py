@@ -5,10 +5,17 @@
 import mozunit
 
 from mozpack.copier import FileCopier, FileRegistry
+from mozpack.files import GeneratedFile
+from mozpack.packager import SimplePackager
 from mozpack.packager.formats import FlatFormatter, JarFormatter, OmniJarFormatter
-from mozpack.packager.unpack import unpack_to_registry
+from mozpack.packager.unpack import UnpackFinder, unpack_to_registry
 from mozpack.test.test_files import TestWithTmpDir
-from mozpack.test.test_packager_formats import CONTENTS, fill_formatter, get_contents
+from mozpack.test.test_packager_formats import (
+    CONTENTS,
+    CONTENTS_WITH_BROWSER,
+    fill_formatter,
+    get_contents,
+)
 
 
 class TestUnpack(TestWithTmpDir):
@@ -61,6 +68,43 @@ class TestUnpack(TestWithTmpDir):
 
     def test_omnijar_subpath_unpack(self):
         self._unpack_test(self._omni_foo_formatter("bar/omni.foo"))
+
+    def test_omnijar_browser_round_trip(self):
+        for unified in (False, True):
+            with self.subTest(unified=unified):
+                copier = FileCopier()
+                formatter = OmniJarFormatter(
+                    copier, "omni.foo", unify_browser=unified
+                )
+                fill_formatter(formatter, CONTENTS_WITH_BROWSER)
+                # Formatter fixtures register addon bases explicitly; a
+                # round trip also needs the metadata used to rediscover them.
+                for base, addon in CONTENTS_WITH_BROWSER["bases"].items():
+                    if addon:
+                        unpack = b"true" if addon == "unpacked" else b"false"
+                        formatter.add(
+                            base + "/install.rdf",
+                            GeneratedFile(
+                                b"<RDF><em:unpack>" + unpack + b"</em:unpack></RDF>"
+                            ),
+                        )
+                copier.copy(self.tmpdir)
+                finder = UnpackFinder(self.tmpdir, omnijar_name="omni.foo")
+                self.assertEqual(finder.kind, "omni")
+                self.assertEqual(finder.unify_browser, unified)
+                registry = FileRegistry()
+                packager = SimplePackager(
+                    OmniJarFormatter(
+                        registry, finder.omnijar, unify_browser=finder.unify_browser
+                    )
+                )
+                for path, file in finder:
+                    packager.add(path, file)
+                packager.close()
+                self.assertEqual(
+                    get_contents(registry, read_all=True, mode="rb"),
+                    get_contents(copier, read_all=True, mode="rb"),
+                )
 
 
 if __name__ == "__main__":

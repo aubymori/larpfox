@@ -6,7 +6,9 @@ from collections import defaultdict
 from operator import itemgetter
 
 import mozpack.path as mozpath
+from mozpack.copier import FileRegistry
 from mozpack.manifests import InstallManifest
+from mozpack.packager.formats import OmniJarSubFormatter
 
 from mozbuild.backend.base import PartialBackend
 from mozbuild.backend.make import MakeBackend
@@ -39,6 +41,11 @@ class FasterMakeBackend(MakeBackend, PartialBackend):
 
         self._generated_files_map = {}
         self._generated_files = []
+        self._theme_resources = (
+            OmniJarSubFormatter(FileRegistry(), "omni.ja")
+            if self.environment.substs.get("MOZ_BUILD_THEME")
+            else None
+        )
 
     def _add_preprocess(self, obj, src, dest, f, **kwargs):
         basename = FinalTargetPreprocessedFiles.get_obj_basename(f)
@@ -71,6 +78,20 @@ class FasterMakeBackend(MakeBackend, PartialBackend):
                 defines = defines.defines
             for path, files in obj.files.walk():
                 for f in files:
+                    if self._theme_resources:
+                        basename = (
+                            FinalTargetPreprocessedFiles.get_obj_basename(f)
+                            if isinstance(obj, FinalTargetPreprocessedFiles)
+                            else f.target_basename
+                        )
+                        target = mozpath.relpath(
+                            mozpath.join(obj.install_target, path, basename), "dist/bin"
+                        ).removeprefix("browser/")
+                        if (
+                            not target.endswith(".manifest")
+                            and not self._theme_resources.is_resource(target)
+                        ):
+                            continue
                     # For localized files we need to find the file from the locale directory.
                     if localized and not isinstance(f, ObjDirPath) and ab_cd != "en-US":
                         src = self.localized_path(obj.relsrcdir, f)
@@ -260,7 +281,18 @@ class FasterMakeBackend(MakeBackend, PartialBackend):
             unified_manifest.write(fileobj=fh)
 
         for obj in self._generated_files:
-            for stmt in self._format_statements_for_generated_file(obj, "default"):
+            tier = "default"
+            if self._theme_resources:
+                tier = None
+                prefix = "$(TOPOBJDIR)/dist/bin/"
+                for output in obj.outputs:
+                    target = self._format_generated_file_output_name(output, obj)
+                    if target.startswith(prefix) and self._theme_resources.is_resource(
+                        target[len(prefix) :].removeprefix("browser/")
+                    ):
+                        tier = "default"
+                        break
+            for stmt in self._format_statements_for_generated_file(obj, tier):
                 mk.add_statement(stmt)
 
         with self._write_file(

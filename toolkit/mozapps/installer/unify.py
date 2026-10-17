@@ -57,6 +57,7 @@ def main():
             app1_finder.omnijar,
             compress=compress,
             non_resources=options.non_resource,
+            unify_browser=app1_finder.unify_browser,
         )
 
     with errors.accumulate():

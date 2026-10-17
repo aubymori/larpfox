@@ -53,6 +53,11 @@
 #endif
 #include "ProfileReset.h"
 
+#ifdef MOZ_BUILD_APP_IS_BROWSER
+#  include "mozilla/LarpfoxTheme.h"
+#  include "nsEscape.h"
+#endif
+
 #ifdef XP_MACOSX
 #  include "nsVersionComparator.h"
 #  include "nsCocoaFeatures.h"
@@ -3897,6 +3902,8 @@ CompatCheckResult CheckCompatibility(nsIFile* aProfileDir,
         encBuf.EqualsLiteral("1");
   }
 
+  (void)parser.GetString("Compatibility", "LastTheme", result.lastTheme);
+
   rv = parser.GetString("Compatibility", "LastVersion", result.lastVersion);
   if (NS_FAILED(rv)) {
     return result;
@@ -3968,6 +3975,49 @@ CompatCheckResult CheckCompatibility(nsIFile* aProfileDir,
   return result;
 }
 
+#ifdef MOZ_BUILD_APP_IS_BROWSER
+static void InitLarpfoxTheme(nsIFile* aProfileDir, nsACString& aTheme) {
+  aTheme.Truncate();
+
+  // An earlier profile-manager XPCOM session may have initialized Omnijar.
+  // Without a theme, leave it uninitialized so real XPCOM startup rediscovers
+  // the installed archives after bringing up the directory service.
+  Omnijar::CleanUp();
+  if (gSafeMode) {
+    return;
+  }
+
+  nsCOMPtr<nsIFile> theme = FindLarpfoxTheme(aProfileDir, false);
+  if (!theme) {
+    return;
+  }
+
+  nsAutoCString path;
+  int64_t modified;
+  int64_t size;
+  if (NS_FAILED(theme->GetPersistentDescriptor(path)) ||
+      NS_FAILED(theme->GetLastModifiedTime(&modified)) ||
+      NS_FAILED(theme->GetFileSize(&size))) {
+    return;
+  }
+
+  // Pass explicit paths: there is no XPCOM directory service yet. The archive
+  // identifies its browser/ subtree, and children inherit its GRE path.
+  if (NS_FAILED(Omnijar::FallibleInit(theme, theme))) {
+    Omnijar::CleanUp();
+    return;
+  }
+
+  // Escape the path so even newlines and trailing spaces round-trip through
+  // compatibility.ini. Replacing an archive at the same path changes identity.
+  NS_EscapeURL(path, esc_FilePath | esc_Forced | esc_AlwaysCopy, aTheme);
+  aTheme.Append('|');
+  aTheme.AppendInt(modified);
+  aTheme.Append('|');
+  aTheme.AppendInt(size);
+}
+#endif
+
 void BuildCompatVersion(const char* aAppVersion, const char* aAppBuildID,
                         const char* aToolkitBuildID, nsACString& aBuf) {
   aBuf.Assign(aAppVersion);
@@ -3984,7 +4034,8 @@ static void BuildVersion(nsCString& aBuf) {
 
 static void WriteVersion(nsIFile* aProfileDir, const nsCString& aVersion,
                          const nsCString& aOSABI, nsIFile* aXULRunnerDir,
-                         nsIFile* aAppDir, bool invalidateCache) {
+                         nsIFile* aAppDir, bool invalidateCache,
+                         const nsACString& aTheme) {
   nsCOMPtr<nsIFile> file;
   aProfileDir->Clone(getter_AddRefs(file));
   if (!file) return;
@@ -4023,6 +4074,12 @@ static void WriteVersion(nsIFile* aProfileDir, const nsCString& aVersion,
     PR_Write(fd, kAppDirHeader, sizeof(kAppDirHeader) - 1);
     PR_Write(fd, appDir.get(), appDir.Length());
   }
+
+#ifdef MOZ_BUILD_APP_IS_BROWSER
+  static const char kThemeHeader[] = NS_LINEBREAK "LastTheme=";
+  PR_Write(fd, kThemeHeader, sizeof(kThemeHeader) - 1);
+  PR_Write(fd, aTheme.BeginReading(), aTheme.Length());
+#endif
 
   static const char kInvalidationHeader[] = NS_LINEBREAK "InvalidateCaches=1";
   if (invalidateCache)
@@ -5885,6 +5942,17 @@ int XREMain::XRE_mainStartup(bool* aExitFlag) {
 
   //////////////////////// NOW WE HAVE A PROFILE ////////////////////////
 
+  nsAutoCString theme;
+#ifdef MOZ_BUILD_APP_IS_BROWSER
+  // All temporary XPCOM sessions are finished and the final profile is locked.
+  // Select the archive before real XPCOM loads any privileged startup
+  // resources.
+  InitLarpfoxTheme(mProfD, theme);
+  if (!theme.Equals(compatResult.lastTheme)) {
+    cachesOK = false;
+  }
+#endif
+
   mozilla::Telemetry::SetProfileDir(mProfD);
 
   if (mAppData->flags & NS_XRE_ENABLE_CRASH_REPORTER) {
@@ -5945,7 +6013,7 @@ int XREMain::XRE_mainStartup(bool* aExitFlag) {
     // should attempt to invalidate the caches if either this run is safe mode
     // or the attempt to invalidate the caches this time failed.
     WriteVersion(mProfD, version, osABI, mDirProvider.GetGREDir(),
-                 mAppData->directory, gSafeMode || !startupCacheValid);
+                 mAppData->directory, gSafeMode || !startupCacheValid, theme);
   }
 
   if (!startupCacheValid) StartupCache::IgnoreDiskCache();

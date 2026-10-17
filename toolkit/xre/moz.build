@@ -240,6 +240,8 @@ for var in ("APP_VERSION", "APP_ID"):
 
 if CONFIG["MOZ_BUILD_APP"] == "browser":
     DEFINES["MOZ_BUILD_APP_IS_BROWSER"] = True
+    EXPORTS.mozilla += ["LarpfoxTheme.h"]
+    UNIFIED_SOURCES += ["LarpfoxTheme.cpp"]
 
 if CONFIG["MOZ_USE_NSS_FOR_MAR"]:
     DEFINES["MAR_NSS"] = True

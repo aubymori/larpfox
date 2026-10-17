@@ -268,6 +268,14 @@ RESULT_FLAT_WITH_BASE = result_with_base(RESULT_FLAT)
 RESULT_JAR_WITH_BASE = result_with_base(RESULT_JAR)
 RESULT_OMNIJAR_WITH_BASE = result_with_base(RESULT_OMNIJAR)
 
+CONTENTS_WITH_BROWSER = {
+    "bases": {b.replace("app", "browser", 1): a for b, a in CONTENTS["bases"].items()},
+    "manifests": [
+        m.move(m.base.replace("app", "browser", 1)) for m in CONTENTS["manifests"]
+    ],
+    "files": {p.replace("app", "browser", 1): f for p, f in CONTENTS["files"].items()},
+}
+
 
 def fill_formatter(formatter, contents):
     for base, is_addon in sorted(contents["bases"].items()):
@@ -287,7 +295,7 @@ def get_contents(registry, read_all=False, mode="rt"):
     result = {}
     for k, v in registry:
         if isinstance(v, FileRegistry):
-            result[k] = get_contents(v)
+            result[k] = get_contents(v, read_all=read_all, mode=mode)
         elif isinstance(v, ManifestFile) or read_all:
             if "b" in mode:
                 result[k] = v.open().read()
@@ -376,6 +384,82 @@ class TestFormatters(TestErrors, unittest.TestCase):
         fill_formatter(formatter, CONTENTS)
         self.assertEqual(get_contents(registry), RESULT_OMNIJAR_WITH_SUBPATH)
         self.do_test_contents(formatter, CONTENTS)
+
+    def test_omnijar_unified_browser(self):
+        expected = {
+            p.replace("app", "browser", 1): f for p, f in RESULT_OMNIJAR.items()
+        }
+        expected["omni.foo"] = dict(expected["omni.foo"])
+        expected["omni.foo"].update({
+            mozpath.join("browser", p): f
+            for p, f in expected.pop("browser/omni.foo").items()
+        })
+        for base in ("", "Firefox.app/Contents/Resources"):
+            with self.subTest(base=base):
+                contents = {
+                    "bases": {
+                        (mozpath.join(base, b) if b else base): a
+                        for b, a in CONTENTS_WITH_BROWSER["bases"].items()
+                    },
+                    "manifests": [
+                        m.move(mozpath.join(base, m.base) if m.base else base)
+                        for m in CONTENTS_WITH_BROWSER["manifests"]
+                    ],
+                    "files": {
+                        mozpath.join(base, p): f
+                        for p, f in CONTENTS_WITH_BROWSER["files"].items()
+                    },
+                }
+                registry = FileRegistry()
+                formatter = OmniJarFormatter(registry, "omni.foo", unify_browser=True)
+                fill_formatter(formatter, contents)
+                self.assertEqual(
+                    get_contents(registry),
+                    {mozpath.join(base, p): f for p, f in expected.items()},
+                )
+                self.do_test_contents(formatter, contents)
+
+    def test_omnijar_unified_browser_non_resources(self):
+        registry = FileRegistry()
+        formatter = OmniJarFormatter(
+            registry, "omni.foo", non_resources=["modules/external.js"],
+            unify_browser=True,
+        )
+        formatter.add_base("")
+        formatter.add_base("browser")
+        formatter.add_manifest(ManifestContent("", "toolkit", "chrome/toolkit/"))
+        formatter.add_manifest(ManifestContent("browser", "browser", "chrome/browser/"))
+        formatter.add_manifest(ManifestBinaryComponent("browser/components", "foo.so"))
+        external = (
+            "browser/components/foo.so",
+            "browser/chrome/icons/default/default.ico",
+            "browser/defaults/preferences/channel-prefs.js",
+            "browser/modules/external.js",
+            "browser/application.ini",
+        )
+        for path in external:
+            formatter.add(path, GeneratedFile(path.encode()))
+            self.assertTrue(registry.contains(path))
+            self.assertTrue(formatter.contains(path))
+            self.assertFalse(registry["omni.foo"].contains(path))
+        formatter.add("browser/modules/internal.js", GeneratedFile(b"internal"))
+        self.assertTrue(registry["omni.foo"].contains("browser/modules/internal.js"))
+        self.assertFalse(registry.contains("browser/omni.foo"))
+        self.assertEqual(
+            get_contents(registry)["browser/chrome.manifest"],
+            ["manifest components/components.manifest"],
+        )
+        self.assertEqual(
+            get_contents(registry["omni.foo"])["browser/chrome.manifest"],
+            ["content browser chrome/browser/"],
+        )
+
+    def test_omnijar_browser_separate_by_default(self):
+        registry = FileRegistry()
+        formatter = OmniJarFormatter(registry, "omni.foo")
+        fill_formatter(formatter, CONTENTS_WITH_BROWSER)
+        self.assertTrue(registry.contains("omni.foo"))
+        self.assertTrue(registry.contains("browser/omni.foo"))
 
     def test_omnijar_is_resource(self):
         def is_resource(base, path):

@@ -132,12 +132,6 @@ const startupPhases = {
       stat: 1,
     },
     {
-      // bug 1376994
-      path: "XCurProcD:omni.ja",
-      condition: !WIN, // Visible on Windows with an open marker
-      stat: 1,
-    },
-    {
       path: "ProfD:parent.lock",
       condition: WIN,
       stat: 1,

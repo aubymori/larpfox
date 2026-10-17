@@ -20,6 +20,7 @@ StaticRefPtr<nsZipArchive> Omnijar::sReader[2];
 StaticRefPtr<nsZipArchive> Omnijar::sOuterReader[2];
 bool Omnijar::sInitialized = false;
 bool Omnijar::sIsUnified = false;
+bool Omnijar::sAppInGRE = false;
 
 static const char* sProp[2] = {NS_GRE_DIR, NS_XPCOM_CURRENT_PROCESS_DIR};
 
@@ -111,7 +112,16 @@ nsresult Omnijar::FallibleInit(nsIFile* aGrePath, nsIFile* aAppPath) {
   // Let's always try to init both before returning any error for the benefit
   // of callers that do not handle the error at all.
   nsresult rvGRE = InitOne(aGrePath, GRE);
-  nsresult rvAPP = InitOne(aAppPath, APP);
+  nsresult rvAPP = NS_OK;
+  sAppInGRE = NS_SUCCEEDED(rvGRE) && sReader[GRE] &&
+              sReader[GRE]->GetItem("browser/chrome.manifest"_ns);
+  if (sAppInGRE) {
+    // The archive itself identifies this layout, including in child processes
+    // that only receive -greomni and do not yet have a directory service.
+    CleanUpOne(APP);
+  } else {
+    rvAPP = InitOne(aAppPath, APP);
+  }
   MOZ_TRY(rvGRE);
   MOZ_TRY(rvAPP);
 
@@ -130,6 +140,8 @@ void Omnijar::CleanUp() {
   CleanUpOne(GRE);
   CleanUpOne(APP);
   sInitialized = false;
+  sIsUnified = false;
+  sAppInGRE = false;
 }
 
 already_AddRefed<nsZipArchive> Omnijar::GetReader(nsIFile* aPath) {
@@ -183,6 +195,12 @@ nsresult Omnijar::GetURIString(Type aType, nsACString& aResult) {
   MOZ_ASSERT(IsInitialized(), "Omnijar not initialized");
 
   aResult.Truncate();
+
+  if (aType == APP && sAppInGRE) {
+    MOZ_TRY(GetURIString(GRE, aResult));
+    aResult.Append(GetEntryPrefix(APP));
+    return NS_OK;
+  }
 
   // Return an empty string for APP in the unified case.
   if ((aType == APP) && sIsUnified) {

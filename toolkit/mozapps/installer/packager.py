@@ -207,6 +207,7 @@ def main():
             buildconfig.substs["OMNIJAR_NAME"],
             compress=compress,
             non_resources=args.non_resource,
+            unify_browser=buildconfig.substs.get("MOZ_BUILD_APP") == "browser",
         )
     else:
         errors.fatal("Unknown format: %s" % args.format)

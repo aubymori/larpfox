@@ -82,6 +82,23 @@ class StoreDebugParamsAndWarnAction(argparse.Action):
 
 
 @Command(
+    "build-theme",
+    category="build",
+    description="Build UI resources into a single theme omni.ja without compiling native code.",
+    virtualenv_name="build",
+)
+@CommandArgument(
+    "--platform",
+    choices=("windows", "linux", "macos"),
+    help="Target UI platform (defaults to the host platform).",
+)
+def build_theme(command_context, platform=None):
+    from mozbuild.theme import build_theme
+
+    return build_theme(command_context.topsrcdir, platform)
+
+
+@Command(
     "watch",
     category="post-build",
     description="Watch and re-build (parts of) the tree.",

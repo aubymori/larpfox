@@ -11,6 +11,9 @@ UNIFIED_SOURCES = [
     "TestGeckoArgs.cpp",
 ]
 
+if CONFIG["MOZ_BUILD_APP"] == "browser":
+    UNIFIED_SOURCES += ["TestLarpfoxTheme.cpp"]
+
 LOCAL_INCLUDES += [
     "/toolkit/components/jsoncpp/include",
     "/toolkit/components/remote",

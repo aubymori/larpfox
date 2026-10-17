@@ -2,14 +2,18 @@
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
+import os
 import unittest
 
 import mozunit
 
 from mozpack.chrome.manifest import Manifest, ManifestContent, ManifestLocale
-from mozpack.copier import FileRegistry
+from mozpack.copier import FileCopier, FileRegistry
 from mozpack.files import GeneratedFile, ManifestFile
 from mozpack.packager import l10n
+from mozpack.packager.formats import FlatFormatter, OmniJarFormatter
+from mozpack.packager.unpack import UnpackFinder
+from mozpack.test.test_files import TestWithTmpDir
 from test_packager import MockFinder
 
 
@@ -142,6 +146,41 @@ class TestL10NRepack(unittest.TestCase):
             dict((p, f.open().read()) for p, f in copier),
             dict((p, f.open().read()) for p, f in repacked.items()),
         )
+
+
+class TestUnifiedL10NRepack(TestWithTmpDir):
+    def test_unified_browser_repack(self):
+        source = os.path.join(self.tmpdir, "source")
+        localized = os.path.join(self.tmpdir, "localized")
+        for destination, locale in ((source, "en-US"), (localized, "fr")):
+            copier = FileCopier()
+            formatter = (
+                OmniJarFormatter(copier, "omni.ja", unify_browser=True)
+                if destination == source
+                else FlatFormatter(copier)
+            )
+            formatter.add_base("")
+            formatter.add_base("browser")
+            for base, package in (("", "toolkit"), ("browser", "browser")):
+                formatter.add_manifest(
+                    ManifestLocale(base, package, locale, "chrome/%s/" % locale)
+                )
+                path = "/".join(p for p in (base, "chrome", locale, "test.ftl") if p)
+                formatter.add(path, GeneratedFile(locale.encode()))
+            copier.copy(destination)
+
+        l10n.repack(source, localized)
+
+        self.assertTrue(os.path.isfile(os.path.join(source, "omni.ja")))
+        self.assertFalse(os.path.exists(os.path.join(source, "browser", "omni.ja")))
+        finder = UnpackFinder(source, omnijar_name="omni.ja")
+        self.assertTrue(finder.unify_browser)
+        self.assertTrue(finder.files.contains("browser/chrome.manifest"))
+        for base in ("", "browser/"):
+            self.assertEqual(
+                finder.files[base + "chrome/fr/test.ftl"].open().read(), b"fr"
+            )
+            self.assertFalse(finder.files.contains(base + "chrome/en-US/test.ftl"))
 
 
 if __name__ == "__main__":

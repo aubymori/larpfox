@@ -294,7 +294,11 @@ def repack(
         formatter = JarFormatter(copier, compress=compress)
     elif app_finder.kind == "omni":
         formatter = OmniJarFormatter(
-            copier, app_finder.omnijar, compress=compress, non_resources=non_resources
+            copier,
+            app_finder.omnijar,
+            compress=compress,
+            non_resources=non_resources,
+            unify_browser=app_finder.unify_browser,
         )
 
     with errors.accumulate():

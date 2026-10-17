@@ -105,6 +105,15 @@ class Preferences final : public nsIPrefService,
   // Returns true if the Preferences service is available, false otherwise.
   static bool IsServiceAvailable();
 
+  // Parse a null-terminated buffer without initializing the preference service
+  // or changing any preferences. Main-thread only, including before XPCOM and
+  // the thread manager have been initialized. The observer is borrowed for the
+  // duration of this call. Valid preferences are reported even on parse errors.
+  static nsresult ParsePrefsBuffer(const nsCString& aBuffer,
+                                   PrefValueKind aKind,
+                                   nsIPrefObserver* aObserver,
+                                   const char* aPathLabel);
+
   // Initialize user prefs from prefs.js/user.js
   static void InitializeUserPrefs();
   static void FinishInitializingUserPrefs();

@@ -15,6 +15,7 @@
 #include "mozilla/ArenaAllocatorExtensions.h"
 #include "mozilla/ArenaAllocator.h"
 #include "mozilla/Attributes.h"
+#include "mozilla/AutoRestore.h"
 #include "mozilla/Components.h"
 #include "mozilla/dom/PContent.h"
 #include "mozilla/dom/Promise.h"
@@ -5386,17 +5387,14 @@ Preferences::ResetStats() {
 #endif
 }
 
-// We would much prefer to use C++ lambdas, but we cannot convert
-// lambdas that capture (here, the underlying observer) to C pointer
-// to functions.  So, here we are, with icky C callbacks.  Be aware
-// that nothing is thread-safe here because there's a single global
-// `nsIPrefObserver` instance.  Use this from the main thread only.
-nsIPrefObserver* PrefObserver = nullptr;
+// The Rust parser takes C callbacks without a closure. This observer is
+// borrowed only during parsing on the main thread, including before XPCOM
+// startup. AutoRestore in ParsePrefsBuffer also permits reentrant observer
+// callbacks.
+static nsIPrefObserver* PrefObserver = nullptr;
 
 void HandlePref(const char* aPrefName, PrefType aType, PrefValueKind aKind,
                 PrefValue aValue, bool aIsSticky, bool aIsLocked) {
-  MOZ_ASSERT(NS_IsMainThread());
-
   if (!PrefObserver) {
     return;
   }
@@ -5422,8 +5420,6 @@ void HandlePref(const char* aPrefName, PrefType aType, PrefValueKind aKind,
 }
 
 void HandleError(const char* aFullMsg, uint64_t aStaticMsgOffset) {
-  MOZ_ASSERT(NS_IsMainThread());
-
   if (!PrefObserver) {
     return;
   }
@@ -5432,22 +5428,32 @@ void HandleError(const char* aFullMsg, uint64_t aStaticMsgOffset) {
   PrefObserver->OnError(aFullMsg);
 }
 
+/* static */ nsresult Preferences::ParsePrefsBuffer(const nsCString& aBuffer,
+                                                    PrefValueKind aKind,
+                                                    nsIPrefObserver* aObserver,
+                                                    const char* aPathLabel) {
+  AutoRestore<nsIPrefObserver*> restoreObserver(PrefObserver);
+  PrefObserver = aObserver;
+  return prefs_parser_parse(
+             aPathLabel ? aPathLabel : "<ParsePrefsFromBuffer data>", aKind,
+             aBuffer.get(), aBuffer.Length(), HandlePref, HandleError)
+             ? NS_OK
+             : NS_ERROR_FILE_CORRUPTED;
+}
+
 NS_IMETHODIMP
 Preferences::ParsePrefsFromBuffer(const nsTArray<uint8_t>& aBytes,
                                   nsIPrefObserver* aObserver,
                                   const char* aPathLabel) {
   MOZ_ASSERT(NS_IsMainThread());
 
-  // We need a null-terminated buffer.
-  nsTArray<uint8_t> data = aBytes.Clone();
-  data.AppendElement(0);
-
-  // Parsing as default handles both `pref` and `user_pref`.
-  PrefObserver = aObserver;
-  prefs_parser_parse(aPathLabel ? aPathLabel : "<ParsePrefsFromBuffer data>",
-                     PrefValueKind::Default, (const char*)data.Elements(),
-                     data.Length() - 1, HandlePref, HandleError);
-  PrefObserver = nullptr;
+  // The native helper accepts a null-terminated string; the XPIDL array does
+  // not guarantee a terminator.
+  nsCString data(reinterpret_cast<const char*>(aBytes.Elements()),
+                 aBytes.Length());
+  // Parsing as default handles both `pref` and `user_pref`. Preserve the XPIDL
+  // API's error reporting through the observer rather than its return value.
+  (void)ParsePrefsBuffer(data, PrefValueKind::Default, aObserver, aPathLabel);
 
   return NS_OK;
 }
@@ -6081,6 +6087,8 @@ nsresult PreferencesImpl::InitInitialObjects(bool aIsStartup) {
   // When `$app != $gre`, we additionally load, in the omni.jar case:
   // - jar:$app/omni.jar!/defaults/preferences/*.js
   // - $app/defaults/preferences/*.js
+  // With a shared archive, the first path is instead
+  // jar:$gre/omni.jar!/browser/defaults/preferences/*.js.
   //
   // and in the non-omni.jar case:
   // - $app/defaults/preferences/*.js
@@ -6186,8 +6194,8 @@ nsresult PreferencesImpl::InitInitialObjects(bool aIsStartup) {
                /* fromInit */ true);
 #endif
 
-  // Load jar:$app/omni.jar!/defaults/preferences/*.js
-  // or jar:$gre/omni.jar!/defaults/preferences/*.js.
+  // Load application defaults from their own archive, the browser/ subtree
+  // of the GRE archive, or the GRE root for applications sharing that root.
   RefPtr<nsZipArchive> appJarReader = Omnijar::GetReader(Omnijar::APP);
 
   // GetReader(Omnijar::APP) returns null when `$app == $gre`, in
@@ -6197,8 +6205,9 @@ nsresult PreferencesImpl::InitInitialObjects(bool aIsStartup) {
   }
 
   if (appJarReader) {
-    rv = appJarReader->FindInit("defaults/preferences/*.js$",
-                                getter_Transfers(find));
+    nsAutoCString prefPattern(Omnijar::GetEntryPrefix(Omnijar::APP));
+    prefPattern.AppendLiteral("defaults/preferences/*.js$");
+    rv = appJarReader->FindInit(prefPattern.get(), getter_Transfers(find));
     NS_ENSURE_SUCCESS(rv, rv);
     prefEntries.Clear();
     while (NS_SUCCEEDED(find->FindNext(&entryName, &entryNameLen))) {
@@ -6214,8 +6223,9 @@ nsresult PreferencesImpl::InitInitialObjects(bool aIsStartup) {
 
 #ifdef MOZ_BACKGROUNDTASKS
     if (BackgroundTasks::IsBackgroundTaskMode()) {
-      rv = appJarReader->FindInit("defaults/backgroundtasks/*.js$",
-                                  getter_Transfers(find));
+      prefPattern = Omnijar::GetEntryPrefix(Omnijar::APP);
+      prefPattern.AppendLiteral("defaults/backgroundtasks/*.js$");
+      rv = appJarReader->FindInit(prefPattern.get(), getter_Transfers(find));
       NS_ENSURE_SUCCESS(rv, rv);
       prefEntries.Clear();
       while (NS_SUCCEEDED(find->FindNext(&entryName, &entryNameLen))) {

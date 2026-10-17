@@ -108,26 +108,19 @@ export var BackgroundUpdate = {
   },
 
   /**
-   * Whether this installation has an App and a GRE omnijar.
+   * Whether this installation has a packaged GRE omnijar.
    *
    * Installations without an omnijar are generally developer builds and should not be updated.
    *
-   * @returns {boolean} - true if this installation has an App and a GRE omnijar.
+   * @returns {boolean} - true if this installation has a GRE omnijar.
    */
   async _hasOmnijar() {
-    const appOmniJar = PathUtils.join(
-      Services.dirsvc.get("XCurProcD", Ci.nsIFile).path,
-      AppConstants.OMNIJAR_NAME
-    );
     const greOmniJar = PathUtils.join(
       Services.dirsvc.get("GreD", Ci.nsIFile).path,
       AppConstants.OMNIJAR_NAME
     );
 
-    let bothExist =
-      (await IOUtils.exists(appOmniJar)) && (await IOUtils.exists(greOmniJar));
-
-    return bothExist;
+    return IOUtils.exists(greOmniJar);
   },
 
   _force() {

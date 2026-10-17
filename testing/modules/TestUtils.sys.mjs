@@ -366,7 +366,7 @@ export var TestUtils = {
   },
 
   assertPackagedBuild() {
-    const omniJa = Services.dirsvc.get("XCurProcD", Ci.nsIFile);
+    const omniJa = Services.dirsvc.get("GreD", Ci.nsIFile);
     omniJa.append("omni.ja");
     if (!omniJa.exists()) {
       const arg = Services.env.exists("XPCSHELL_TEST_PROFILE_DIR")

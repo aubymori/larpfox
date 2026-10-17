@@ -42,6 +42,7 @@ class UnpackFinder(BaseFinder):
         self.base = self._finder.base
         self.files = FileRegistry()
         self.kind = "flat"
+        self.unify_browser = False
         if omnijar_name:
             self.omnijar = omnijar_name
         else:
@@ -68,6 +69,8 @@ class UnpackFinder(BaseFinder):
                 jar = self._open_jar(p, f)
                 if "chrome.manifest" in jar:
                     self.kind = "omni"
+                    if "browser/chrome.manifest" in jar:
+                        self.unify_browser = True
                     self._fill_with_jar(p[: -len(self.omnijar) - 1], jar)
                     continue
             # If the file is a manifest, scan its entries for some referencing

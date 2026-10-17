@@ -10,6 +10,13 @@ elements that are typically part of the chrome.
 `chrome.manifest` files are used to register XPCOM components and sources for the chrome protocol.
 Every application supplies a root `chrome.manifest` file that Mozilla reads on startup.
 
+Larpfox packages toolkit and browser resources in a single `omni.ja` beside
+the application resources. Toolkit entries stay at the archive root; browser
+entries retain a `browser/` prefix, including `browser/chrome.manifest`.
+`resource://gre/` resolves to the archive root and `resource:///` resolves to
+its `browser/` subtree. Chrome URLs are unchanged. Native libraries and other
+non-resource files remain outside the archive.
+
 # Chrome providers
 
 A supplier of chrome for a given window type (e.g., for the browser

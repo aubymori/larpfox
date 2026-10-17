@@ -256,10 +256,13 @@ class OmniJarFormatter(JarFormatter):
     Formatter for the omnijar package format.
     """
 
-    def __init__(self, copier, omnijar_name, compress=True, non_resources=()):
+    def __init__(
+        self, copier, omnijar_name, compress=True, non_resources=(), unify_browser=False
+    ):
         JarFormatter.__init__(self, copier, compress)
         self._omnijar_name = omnijar_name
         self._non_resources = non_resources
+        self._unify_browser = unify_browser
 
     def _add_base(self, base, addon=False):
         if addon:
@@ -272,6 +275,7 @@ class OmniJarFormatter(JarFormatter):
             # omnijar.
             parent_sub_formatter = self._sub_formatter[parent_base]
             if parent_sub_formatter.is_resource(rel_base):
+                parent_sub_formatter._ensure_omnijar()
                 omnijar_sub_formatter = parent_sub_formatter._sub_formatter[
                     self._omnijar_name
                 ]
@@ -281,11 +285,15 @@ class OmniJarFormatter(JarFormatter):
                 return
             JarFormatter._add_base(self, base, addon)
         else:
+            parent = None
+            if self._unify_browser and mozpath.basename(base) == "browser":
+                parent = self._sub_formatter.get(mozpath.dirname(base))
             self._sub_formatter[base] = OmniJarSubFormatter(
                 FileRegistrySubtree(base, self.copier),
                 self._omnijar_name,
                 self._compress,
                 self._non_resources,
+                parent=parent,
             )
 
 
@@ -296,26 +304,45 @@ class OmniJarSubFormatter(PiecemealFormatter):
     another FlatSubFormatter for the other files.
     """
 
-    def __init__(self, copier, omnijar_name, compress=True, non_resources=()):
+    def __init__(
+        self, copier, omnijar_name, compress=True, non_resources=(), parent=None
+    ):
         PiecemealFormatter.__init__(self, copier)
         self._omnijar_name = omnijar_name
         self._compress = compress
         self._non_resources = non_resources
         self._sub_formatter[""] = FlatSubFormatter(copier)
-        jarrer = Jarrer(self._compress)
-        self._sub_formatter[omnijar_name] = FlatSubFormatter(jarrer)
+        # A unified browser base shares the parent's archive but keeps its
+        # own manifest root and resource classification.
+        self._parent = parent
+        if parent is None:
+            resources = Jarrer(self._compress)
+        else:
+            resources = FileRegistrySubtree(
+                "browser", parent._sub_formatter[omnijar_name].copier
+            )
+        self._sub_formatter[omnijar_name] = FlatSubFormatter(resources)
 
     def _get_base(self, path):
         base = self._omnijar_name if self.is_resource(path) else ""
-        # Only add the omnijar file if something ends up in it.
-        if base and not self.copier.contains(base):
-            self.copier.add(base, self._sub_formatter[base].copier)
+        if base:
+            self._ensure_omnijar()
         return base, path
+
+    def _ensure_omnijar(self):
+        # Only add the omnijar file if something ends up in it.
+        if self._parent is not None:
+            self._parent._ensure_omnijar()
+        elif not self.copier.contains(self._omnijar_name):
+            self.copier.add(
+                self._omnijar_name, self._sub_formatter[self._omnijar_name].copier
+            )
 
     def add_manifest(self, entry):
         base = ""
         if not isinstance(entry, ManifestBinaryComponent):
             base = self._omnijar_name
+            self._ensure_omnijar()
         formatter = self._sub_formatter[base]
         return formatter.add_manifest(entry)
 

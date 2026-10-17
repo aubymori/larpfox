@@ -45,6 +45,11 @@ class Omnijar {
    */
   static bool sIsUnified;
 
+  /**
+   * APP resources live under browser/ in the GRE archive.
+   */
+  static bool sAppInGRE;
+
  public:
   enum Type { GRE = 0, APP = 1 };
 
@@ -107,7 +112,7 @@ class Omnijar {
   /**
    * Returns an nsIFile pointing to the omni.jar file for GRE or APP.
    * Returns nullptr when there is no corresponding omni.jar.
-   * Also returns nullptr for APP in the unified case.
+   * Also returns nullptr for APP when it shares the GRE archive.
    */
   static inline already_AddRefed<nsIFile> GetPath(Type aType) {
     MOZ_ASSERT(IsInitialized(), "Omnijar not initialized");
@@ -116,22 +121,33 @@ class Omnijar {
   }
 
   /**
-   * Returns whether GRE or APP use an omni.jar. Returns PR_False for
-   * APP when using an omni.jar in the unified case.
+   * Returns whether GRE or APP use an omni.jar. APP is false when it shares
+   * the GRE root, but true when it has its own subtree in the GRE archive.
    */
   static inline bool HasOmnijar(Type aType) {
     MOZ_ASSERT(IsInitialized(), "Omnijar not initialized");
-    return !!sPath[aType];
+    return !!sPath[aType] || (aType == APP && sAppInGRE);
   }
 
   /**
-   * Returns a nsZipArchive pointer for the omni.jar file for GRE or
-   * APP. Returns nullptr in the same cases GetPath() would.
+   * Returns a reader for GRE or APP. When APP is a subtree of GRE, both
+   * return the same reader; callers must prepend GetEntryPrefix() to entries.
+   * Returns nullptr for APP when it shares the GRE root.
    */
   static inline already_AddRefed<nsZipArchive> GetReader(Type aType) {
     MOZ_ASSERT(IsInitialized(), "Omnijar not initialized");
-    RefPtr<nsZipArchive> reader = sReader[aType].get();
+    RefPtr<nsZipArchive> reader =
+        sReader[aType == APP && sAppInGRE ? GRE : aType].get();
     return reader.forget();
+  }
+
+  /**
+   * The path prefix inside GetReader(aType), including a trailing slash
+   * when nonempty. URI strings already include this prefix.
+   */
+  static nsLiteralCString GetEntryPrefix(Type aType) {
+    MOZ_ASSERT(IsInitialized(), "Omnijar not initialized");
+    return aType == APP && sAppInGRE ? "browser/"_ns : ""_ns;
   }
 
   /**
@@ -154,8 +170,8 @@ class Omnijar {
   /**
    * Returns the URI string corresponding to the omni.jar or directory
    * for GRE or APP. i.e. jar:/path/to/omni.jar!/ for omni.jar and
-   * /path/to/base/dir/ otherwise. Returns an empty string for APP in
-   * the unified case.
+   * /path/to/base/dir/ otherwise. APP includes browser/ when using a subtree
+   * of GRE, or is empty when APP shares the GRE root.
    * The returned URI is guaranteed to end with a slash.
    */
   static nsresult GetURIString(Type aType, nsACString& aResult);

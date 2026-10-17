@@ -22,6 +22,9 @@
   pref("browser.hiddenWindowChromeURL", "chrome://browser/content/hiddenWindowMac.xhtml");
 #endif
 
+// Profile theme archive basename; changes take effect on restart.
+pref("larpfox.current-theme", "");
+
 // Set add-ons abuse report related prefs specific to Firefox Desktop.
 pref("extensions.abuseReport.enabled", true);
 

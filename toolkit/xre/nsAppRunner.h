@@ -98,6 +98,7 @@ struct CompatCheckResult {
   nsCString lastAppVersion{VoidCString()};
   nsCString lastAppBuildID{VoidCString()};
   nsCString lastVersion;
+  nsCString lastTheme;
 };
 
 CompatCheckResult CheckCompatibility(nsIFile* aProfileDir,

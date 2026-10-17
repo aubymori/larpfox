@@ -78,6 +78,7 @@ MACH_COMMANDS = {
     "build-backend": MachCommandReference(
         "python/mozbuild/mozbuild/build_commands.py",
     ),
+    "build-theme": MachCommandReference("python/mozbuild/mozbuild/mach_commands.py"),
     "buildsymbols": MachCommandReference("python/mozbuild/mozbuild/mach_commands.py"),
     "buildtokens": MachCommandReference("toolkit/content/widgets/mach_commands.py"),
     "busted": MachCommandReference("tools/mach_commands.py"),

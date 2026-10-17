@@ -79,6 +79,9 @@ UNIFIED_SOURCES += [
     "TestVariant.cpp",
 ]
 
+if CONFIG["MOZ_ZIPWRITER"]:
+    UNIFIED_SOURCES += ["TestOmnijar.cpp"]
+
 # Bug 1894540 - Fails under TSAN
 if not CONFIG["MOZ_TSAN"]:
     UNIFIED_SOURCES += [

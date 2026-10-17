@@ -21,7 +21,7 @@ async function run_test() {
   // Without omnijars, the background task apparatus will fail to find task
   // definitions.
   {
-    let omniJa = Services.dirsvc.get("XCurProcD", Ci.nsIFile);
+    let omniJa = Services.dirsvc.get("GreD", Ci.nsIFile);
     omniJa.append("omni.ja");
     if (!omniJa.exists()) {
       Assert.ok(

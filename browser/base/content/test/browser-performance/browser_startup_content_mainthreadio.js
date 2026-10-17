@@ -80,14 +80,6 @@ const processes = {
       stat: 1,
     },
     {
-      // bug 1376994
-      path: "XCurProcD:omni.ja",
-      // Visible on Windows with an open marker.
-      // The fork server preloads the omnijars.
-      condition: !WIN && !FORK_SERVER,
-      stat: 1,
-    },
-    {
       // Exists call in ScopedXREEmbed::SetAppDir
       path: "XCurProcD:",
       condition: WIN,
@@ -109,14 +101,6 @@ const processes = {
       stat: 1,
     },
     {
-      // bug 1376994
-      path: "XCurProcD:omni.ja",
-      // Visible on Windows with an open marker.
-      // The fork server preloads the omnijars.
-      condition: !WIN && !FORK_SERVER,
-      stat: 1,
-    },
-    {
       // Exists call in ScopedXREEmbed::SetAppDir
       path: "XCurProcD:",
       condition: WIN,
@@ -126,14 +110,6 @@ const processes = {
   WebExtensions: [
     {
       path: "GreD:omni.ja",
-      // Visible on Windows with an open marker.
-      // The fork server preloads the omnijars.
-      condition: !WIN && !FORK_SERVER,
-      stat: 1,
-    },
-    {
-      // bug 1376994
-      path: "XCurProcD:omni.ja",
       // Visible on Windows with an open marker.
       // The fork server preloads the omnijars.
       condition: !WIN && !FORK_SERVER,

@@ -228,8 +228,11 @@ void nsHyphenationManager::LoadPatternListFromOmnijar(Omnijar::Type aType) {
     return;
   }
 
+  auto prefix = Omnijar::GetEntryPrefix(aType);
+  nsAutoCString pattern(prefix);
+  pattern.AppendLiteral("hyphenation/hyph_*.*");
   nsZipFind* find;
-  zip->FindInit("hyphenation/hyph_*.*", &find);
+  zip->FindInit(pattern.get(), &find);
   if (!find) {
     return;
   }
@@ -238,7 +241,7 @@ void nsHyphenationManager::LoadPatternListFromOmnijar(Omnijar::Type aType) {
   uint16_t len;
   while (NS_SUCCEEDED(find->FindNext(&result, &len))) {
     nsCString uriString(base);
-    uriString.Append(result, len);
+    uriString.Append(result + prefix.Length(), len - prefix.Length());
     nsCOMPtr<nsIURI> uri;
     rv = NS_NewURI(getter_AddRefs(uri), uriString);
     if (NS_FAILED(rv)) {

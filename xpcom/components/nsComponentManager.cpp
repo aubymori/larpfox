@@ -367,7 +367,10 @@ nsresult nsComponentManagerImpl::Init() {
     if (appOmnijar) {
       cl = sModuleLocations->AppendElement();
       cl->type = NS_APP_LOCATION;
-      cl->location.Init(appOmnijar, "chrome.manifest"_ns);
+      nsAutoCString manifestPath(
+          mozilla::Omnijar::GetEntryPrefix(mozilla::Omnijar::APP));
+      manifestPath.AppendLiteral("chrome.manifest");
+      cl->location.Init(appOmnijar, manifestPath);
     } else {
       bool equals = false;
       appDir->Equals(greDir, &equals);

@@ -1158,6 +1158,35 @@ Result<Ok, LaunchError> BaseProcessLauncher::DoSetup() {
     }
   }
 
+  if ((mProcessType == GeckoProcessType_Content ||
+       mProcessType == GeckoProcessType_ForkServer) &&
+      Omnijar::IsInitialized()) {
+    // Full-XPCOM children must use the same archive as the parent.
+    for (auto type : {Omnijar::GRE, Omnijar::APP}) {
+      nsCOMPtr<nsIFile> file = Omnijar::GetPath(type);
+      if (!file) {
+        continue;
+      }
+      nsAutoCString path;
+#ifdef XP_WIN
+      nsAutoString widePath;
+      if (NS_FAILED(file->GetPath(widePath))) {
+        continue;
+      }
+      CopyUTF16toUTF8(widePath, path);
+#else
+      if (NS_FAILED(file->GetNativePath(path))) {
+        continue;
+      }
+#endif
+      if (type == Omnijar::GRE) {
+        geckoargs::sGREOmni.Put(path.get(), mChildArgs);
+      } else {
+        geckoargs::sAppOmni.Put(path.get(), mChildArgs);
+      }
+    }
+  }
+
   return Ok();
 }
 
@@ -1276,22 +1305,6 @@ Result<Ok, LaunchError> PosixProcessLauncher::DoSetup() {
                             std::end(args));
   } else {
     mChildArgs.mArgs.insert(mChildArgs.mArgs.begin(), exePath.value());
-  }
-
-  if ((mProcessType == GeckoProcessType_Content ||
-       mProcessType == GeckoProcessType_ForkServer) &&
-      Omnijar::IsInitialized()) {
-    // Make sure that child processes can find the omnijar, if they
-    // use full XPCOM.  See Omnijar::ChildProcessInit and its callers.
-    nsAutoCString path;
-    nsCOMPtr<nsIFile> greFile = Omnijar::GetPath(Omnijar::GRE);
-    if (greFile && NS_SUCCEEDED(greFile->GetNativePath(path))) {
-      geckoargs::sGREOmni.Put(path.get(), mChildArgs);
-    }
-    nsCOMPtr<nsIFile> appFile = Omnijar::GetPath(Omnijar::APP);
-    if (appFile && NS_SUCCEEDED(appFile->GetNativePath(path))) {
-      geckoargs::sAppOmni.Put(path.get(), mChildArgs);
-    }
   }
 
   if (mProcessType != GeckoProcessType_GMPlugin) {
