@@ -182,3 +182,123 @@ add_task(async function scrollbar_modes_update_existing_frames() {
     }
   );
 });
+
+add_task(async function non_native_scrollbar_parts_leave_the_track_visible() {
+  await SpecialPowers.pushPrefEnv({
+    set: [
+      ["ui.useOverlayScrollbars", 0],
+      ["widget.non-native-theme.scrollbar.enabled", 1],
+      ["widget.non-native-theme.scrollbar.style", 4],
+      ["widget.non-native-theme.scrollbar.size.override", 17],
+      ["widget.non-native-theme.win.scrollbar.use-system-size", false],
+      ["layout.css.devPixelsPerPx", "1.0"],
+    ],
+  });
+  await BrowserTestUtils.withNewTab(
+    "data:text/html," +
+      encodeURIComponent(`<!doctype html>
+        <style>
+          #scroller {
+            width: 240px; height: 180px; margin: 40px; overflow: scroll;
+            scrollbar-color: rgb(0, 255, 0) rgb(0, 0, 255);
+          }
+          #scroller > div { width: 800px; height: 800px; }
+        </style>
+        <div id="scroller"><div></div></div>`),
+    async browser => {
+      await SpecialPowers.spawn(browser, [], () => {
+        const children = node =>
+          Array.from(
+            content.InspectorUtils.getChildrenForNode(node, true, false)
+          );
+        const snapshot = node => {
+          const canvas = SpecialPowers.snapshotRect(
+            content,
+            node.getBoundingClientRect()
+          );
+          const { width, height } = canvas;
+          const { data } = canvas
+            .getContext("2d")
+            .getImageData(0, 0, width, height);
+          return {
+            width,
+            height,
+            colorAt(x, y) {
+              const offset = 4 * (y * width + x);
+              return Array.from(data.slice(offset, offset + 4)).join(",");
+            },
+          };
+        };
+        const scroller = content.document.getElementById("scroller");
+        for (const vertical of [false, true]) {
+          const scrollbar = children(scroller).find(
+            node =>
+              node.localName == "scrollbar" &&
+              node.hasAttribute("vertical") == vertical
+          );
+          const track = children(scrollbar).find(
+            node => node.localName == "slider"
+          );
+          const thumb = snapshot(
+            children(track).find(node => node.localName == "thumb")
+          );
+          const along = Math.floor((vertical ? thumb.height : thumb.width) / 2);
+          const across = vertical ? thumb.width : thumb.height;
+          for (const edge of [0, across - 1]) {
+            Assert.equal(
+              vertical
+                ? thumb.colorAt(edge, along)
+                : thumb.colorAt(along, edge),
+              "0,0,255,255",
+              "Both sides of the thumb expose the track color"
+            );
+          }
+          Assert.equal(
+            vertical
+              ? thumb.colorAt(Math.floor(across / 2), along)
+              : thumb.colorAt(along, Math.floor(across / 2)),
+            "0,255,0,255",
+            "The inset thumb retains its custom color"
+          );
+          for (const button of children(scrollbar).filter(
+            node =>
+              node.localName == "scrollbarbutton" &&
+              node.getBoundingClientRect().width > 0
+          )) {
+            const image = snapshot(button);
+            const colors = new Set();
+            const centerLine = [];
+            for (let y = 0; y < image.height; ++y) {
+              for (let x = 0; x < image.width; ++x) {
+                const color = image.colorAt(x, y);
+                colors.add(color);
+                if (
+                  color == "255,255,255,255" &&
+                  (vertical
+                    ? x == Math.floor(image.width / 2)
+                    : y == Math.floor(image.height / 2))
+                ) {
+                  centerLine.push(vertical ? y : x);
+                }
+              }
+            }
+            Assert.deepEqual(
+              [...colors].sort(),
+              ["0,0,255,255", "255,255,255,255"],
+              "Scrollbar arrows have solid edges without antialiasing"
+            );
+            const center =
+              centerLine.reduce((sum, value) => sum + value, 0) /
+              centerLine.length;
+            const middle = ((vertical ? image.height : image.width) - 1) / 2;
+            if (button.getAttribute("type") == "decrement") {
+              Assert.less(center, middle, "Arrow points up or left");
+            } else {
+              Assert.greater(center, middle, "Arrow points down or right");
+            }
+          }
+        }
+      });
+    }
+  );
+});

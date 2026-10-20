@@ -48,6 +48,12 @@ preferences. Native scrollbar minimum sizes include the whole bar's thickness
 and button space; painted borders do not add layout borders that would hide
 oversized thumbs.
 
+The Windows 10-style non-native renderer uses the pre-`ScrollbarDrawing`
+appearance: thumbs and buttons are inset by one CSS pixel on each side,
+rounded to device pixels, and the legacy arrow shapes are drawn without
+antialiasing. High-contrast button outlines are retained. These painted insets
+do not shrink the scrollbar hit areas or reserved layout space.
+
 There is no `widget.non-native-theme.enabled` preference or enablement gate.
 
 ### Content sandbox tradeoff
@@ -67,7 +73,8 @@ level of 9 does not imply upstream level-9 token isolation in this build.
 The Windows browser tests cover author padding, independently styled native
 range and progress subparts, dark non-native colors and parent painting,
 normal/thin/hidden native scrollbar geometry, all three scrollbar modes,
-custom colors, stable gutters, and live preference and style changes:
+custom colors, stable gutters, live preference and style changes, inset thumbs,
+and crisp arrows pointing in all four directions:
 
 ```sh
 ./mach mochitest --flavor browser \

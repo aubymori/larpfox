@@ -4,6 +4,8 @@
 
 #include "ScrollbarDrawingWin.h"
 
+#include <cmath>
+
 #include "Theme.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/StaticPrefs_widget.h"
@@ -125,7 +127,15 @@ bool ScrollbarDrawingWin::DoPaintScrollbarThumb(
     const DPIRatio& aDpiRatio) {
   sRGBColor thumbColor =
       ComputeScrollbarThumbColor(aFrame, aStyle, aElementState, aColors);
-  ThemeDrawing::FillRect(aPaintData, aRect, thumbColor);
+  LayoutDeviceRect thumbRect(aRect);
+  const float inset = std::round(float(AppUnitsPerCSSPixel()) /
+                                 aFrame->PresContext()->AppUnitsPerDevPixel());
+  if (aScrollbarKind == ScrollbarKind::Horizontal) {
+    thumbRect.Deflate(0, inset);
+  } else {
+    thumbRect.Deflate(inset, 0);
+  }
+  ThemeDrawing::FillRect(aPaintData, thumbRect, thumbColor);
   return true;
 }
 

@@ -4,6 +4,8 @@
 
 #include "ScrollbarDrawing.h"
 
+#include <cmath>
+
 #include "mozilla/RelativeLuminanceUtils.h"
 #include "mozilla/StaticPrefs_widget.h"
 #include "nsDeviceContext.h"
@@ -357,14 +359,23 @@ bool ScrollbarDrawing::PaintScrollbarButton(
     const DPIRatio& aDpiRatio) {
   auto [buttonColor, arrowColor] = ComputeScrollbarButtonColors(
       aFrame, aAppearance, aStyle, aElementState, aColors);
+  LayoutDeviceRect buttonRect(aRect);
+  const float inset = std::round(float(AppUnitsPerCSSPixel()) /
+                                 aFrame->PresContext()->AppUnitsPerDevPixel());
+  if (aScrollbarKind == ScrollbarKind::Horizontal) {
+    buttonRect.Deflate(0, inset);
+  } else {
+    buttonRect.Deflate(inset, 0);
+  }
   auto borderColor = aColors.System(StyleSystemColor::Buttontext);
   // Draw an outline around the scrollbar in high contrast mode
   auto borderWidth = aColors.HighContrast() ? CSSCoord(1.0f) : CSSCoord(0.0f);
-  ThemeDrawing::PaintRoundedRectWithRadius(
-      aDrawTarget, aRect, buttonColor, borderColor, borderWidth, 0, aDpiRatio);
+  ThemeDrawing::PaintRoundedRectWithRadius(aDrawTarget, buttonRect, buttonColor,
+                                           borderColor, borderWidth, 0,
+                                           aDpiRatio);
   // Start with Up arrow.
-  float arrowPolygonX[] = {-4.0f, 0.0f, 4.0f, 4.0f, 0.0f, -4.0f};
-  float arrowPolygonY[] = {0.0f, -4.0f, 0.0f, 3.0f, -1.0f, 3.0f};
+  float arrowPolygonX[] = {5.0f, 8.5f, 12.0f, 12.0f, 8.5f, 5.0f};
+  float arrowPolygonY[] = {9.0f, 6.0f, 9.0f, 12.0f, 9.0f, 12.0f};
 
   const float kPolygonSize = 17;
 
@@ -374,7 +385,7 @@ bool ScrollbarDrawing::PaintScrollbarButton(
       break;
     case StyleAppearance::ScrollbarbuttonDown:
       for (float& y : arrowPolygonY) {
-        y *= -1;
+        y = kPolygonSize - y;
       }
       break;
     case StyleAppearance::ScrollbarbuttonLeft:
@@ -387,15 +398,26 @@ bool ScrollbarDrawing::PaintScrollbarButton(
     case StyleAppearance::ScrollbarbuttonRight:
       for (int32_t i = 0; i < arrowNumPoints; i++) {
         float temp = arrowPolygonX[i];
-        arrowPolygonX[i] = arrowPolygonY[i] * -1;
+        arrowPolygonX[i] = kPolygonSize - arrowPolygonY[i];
         arrowPolygonY[i] = temp;
       }
       break;
     default:
       return false;
   }
-  ThemeDrawing::PaintArrow(aDrawTarget, aRect, arrowPolygonX, arrowPolygonY,
-                           kPolygonSize, arrowNumPoints, arrowColor);
+  const float scale = ThemeDrawing::ScaleToFillRect(aRect, kPolygonSize);
+  const auto start = aRect.TopLeft().ToUnknownPoint();
+  RefPtr<PathBuilder> builder = aDrawTarget.CreatePathBuilder();
+  builder->MoveTo(start +
+                  Point(arrowPolygonX[0] * scale, arrowPolygonY[0] * scale));
+  for (int32_t i = 1; i < arrowNumPoints; i++) {
+    builder->LineTo(start +
+                    Point(arrowPolygonX[i] * scale, arrowPolygonY[i] * scale));
+  }
+  RefPtr<Path> path = builder->Finish();
+  aDrawTarget.Fill(
+      path, ColorPattern(ToDeviceColor(arrowColor)),
+      DrawOptions(1.0f, CompositionOp::OP_OVER, AntialiasMode::NONE));
 
   return true;
 }
