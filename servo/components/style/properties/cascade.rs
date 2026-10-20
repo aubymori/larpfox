@@ -1269,6 +1269,18 @@ impl<'a> Cascade<'a> {
             builder.add_flags(ComputedValueFlags::HAS_AUTHOR_SPECIFIED_BORDER_BACKGROUND);
         }
 
+        if [
+            LonghandId::PaddingTop,
+            LonghandId::PaddingRight,
+            LonghandId::PaddingBottom,
+            LonghandId::PaddingLeft,
+        ]
+        .iter()
+        .any(|id| self.author_specified.contains(*id))
+        {
+            builder.add_flags(ComputedValueFlags::HAS_AUTHOR_SPECIFIED_PADDING);
+        }
+
         if self.author_specified.contains(LonghandId::Color) {
             builder.add_flags(ComputedValueFlags::HAS_AUTHOR_SPECIFIED_TEXT_COLOR);
         }
@@ -1321,6 +1333,7 @@ impl<'a> Cascade<'a> {
         // to do anyways, even if it's only used on inherited properties.
         let bits_to_copy = ComputedValueFlags::HAS_AUTHOR_SPECIFIED_BORDER_BACKGROUND
             | ComputedValueFlags::HAS_AUTHOR_SPECIFIED_GRID_AUTO_FLOW
+            | ComputedValueFlags::HAS_AUTHOR_SPECIFIED_PADDING
             | ComputedValueFlags::DEPENDS_ON_SELF_FONT_METRICS
             | ComputedValueFlags::DEPENDS_ON_INHERITED_FONT_METRICS
             | ComputedValueFlags::IS_IN_APPEARANCE_BASE_SUBTREE

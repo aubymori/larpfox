@@ -693,6 +693,20 @@ progress::slider-fill {
   background-color: #0064b4; /* blue */
 }
 
+@media (-moz-platform: windows) {
+  progress::-moz-progress-bar,
+  progress::slider-fill {
+    appearance: auto;
+    -moz-default-appearance: progresschunk;
+  }
+
+  input[type="range"]::-moz-range-thumb,
+  input[type="range"]::slider-thumb {
+    appearance: auto;
+    -moz-default-appearance: range-thumb;
+  }
+}
+
 meter {
   appearance: auto;
   -moz-default-appearance: meter;

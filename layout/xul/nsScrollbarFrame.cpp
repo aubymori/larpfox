@@ -352,7 +352,7 @@ nscoord nsScrollbarFrame::ScrollbarTrackSize() const {
 
   nsPresContext* pc = PresContext();
   return LayoutDevicePixel::ToAppUnits(
-      pc->Theme()->GetScrollbarSize(pc, ScrollbarWidth(), overlay),
+      pc->Theme()->GetScrollbarSize(pc, ScrollbarWidth(), overlay, this),
       pc->AppUnitsPerDevPixel());
 }
 

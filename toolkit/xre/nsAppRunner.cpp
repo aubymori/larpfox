@@ -687,6 +687,8 @@ static bool Win32kRequirementsUnsatisfied(
                         OperatingSystemNotSupported ||
          aStatus ==
              nsIXULRuntime::ContentWin32kLockdownState::MissingWebRender ||
+         aStatus == nsIXULRuntime::ContentWin32kLockdownState::
+                        MissingNonNativeTheming ||
          aStatus ==
              nsIXULRuntime::ContentWin32kLockdownState::DecodersArentRemote;
 }
@@ -748,68 +750,11 @@ void EnsureWin32kInitialized();
 nsIXULRuntime::ContentWin32kLockdownState GetLiveWin32kLockdownState() {
 #ifdef XP_WIN
 
-  // HasUserValue The Pref functions can only be called on main thread
   MOZ_ASSERT(NS_IsMainThread());
-
-#  ifdef MOZ_BACKGROUNDTASKS
-  if (BackgroundTasks::IsBackgroundTaskMode()) {
-    // Let's bail out before loading all the graphics libs.
-    return nsIXULRuntime::ContentWin32kLockdownState::DisabledByDefault;
-  }
-#  endif
-
   mozilla::EnsureWin32kInitialized();
-  gfxPlatform::GetPlatform();
 
-  if (EnvHasValue("MOZ_ENABLE_WIN32K")) {
-    return nsIXULRuntime::ContentWin32kLockdownState::DisabledByEnvVar;
-  }
-
-  if (!mozilla::BrowserTabsRemoteAutostart()) {
-    return nsIXULRuntime::ContentWin32kLockdownState::DisabledByE10S;
-  }
-
-  // Win32k lockdown is available on Win8+, but we are initially limiting it to
-  // Windows 10 v1709 (build 16299) or later. Before this COM initialization
-  // currently fails if user32.dll has loaded before it is called.
-  if (!IsWin10FallCreatorsUpdateOrLater()) {
-    return nsIXULRuntime::ContentWin32kLockdownState::
-        OperatingSystemNotSupported;
-  }
-
-  // Some (not sure exactly which) decoders are not compatible
-  if (!PDMFactory::AllDecodersAreRemote()) {
-    return nsIXULRuntime::ContentWin32kLockdownState::DecodersArentRemote;
-  }
-
-  bool prefSetByUser =
-      Preferences::HasUserValue("security.sandbox.content.win32k-disable");
-  bool prefValue = Preferences::GetBool(
-      "security.sandbox.content.win32k-disable", false, PrefValueKind::User);
-  bool defaultValue = Preferences::GetBool(
-      "security.sandbox.content.win32k-disable", false, PrefValueKind::Default);
-
-  if (prefSetByUser) {
-    if (prefValue) {
-      return nsIXULRuntime::ContentWin32kLockdownState::EnabledByUserPref;
-    } else {
-      return nsIXULRuntime::ContentWin32kLockdownState::DisabledByUserPref;
-    }
-  }
-
-  if (gWin32kExperimentStatus ==
-      nsIXULRuntime::ExperimentStatus::eExperimentStatusControl) {
-    return nsIXULRuntime::ContentWin32kLockdownState::DisabledByControlGroup;
-  } else if (gWin32kExperimentStatus ==
-             nsIXULRuntime::ExperimentStatus::eExperimentStatusTreatment) {
-    return nsIXULRuntime::ContentWin32kLockdownState::EnabledByTreatmentGroup;
-  }
-
-  if (defaultValue) {
-    return nsIXULRuntime::ContentWin32kLockdownState::EnabledByDefault;
-  } else {
-    return nsIXULRuntime::ContentWin32kLockdownState::DisabledByDefault;
-  }
+  // Native controls require UXTheme and GDI in content processes.
+  return nsIXULRuntime::ContentWin32kLockdownState::MissingNonNativeTheming;
 
 #else
 

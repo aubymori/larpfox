@@ -85,7 +85,8 @@ NS_QUERYFRAME_TAIL_INHERITING(nsContainerFrame)
 
 void nsProgressFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
                                        const nsDisplayListSet& aLists) {
-  if (IsThemed()) {
+  if (IsThemed() && PresContext()->Theme()->ThemeDrawsWidgetChildren(
+                        this, StyleDisplay()->EffectiveAppearance())) {
     DisplayBorderBackgroundOutline(aBuilder, aLists);
   } else {
     BuildDisplayListForInline(aBuilder, aLists);

@@ -20709,6 +20709,13 @@
   value: false
   mirror: always
 
+# Windows scrollbar rendering: 0 = native, 1 = non-native,
+# 2 = non-native only for dark or custom-colored scrollbars.
+- name: widget.non-native-theme.scrollbar.enabled
+  type: int32_t
+  value: 2
+  mirror: always
+
 # The style of scrollbars to use. Here are the current options:
 #
 #   0: Default platform scrollbar style.

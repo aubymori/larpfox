@@ -106,8 +106,8 @@ class nsITheme : public nsISupports {
    */
   enum class Overlay { No, Yes };
   virtual LayoutDeviceIntCoord GetScrollbarSize(const nsPresContext*,
-                                                StyleScrollbarWidth,
-                                                Overlay) = 0;
+                                                StyleScrollbarWidth, Overlay,
+                                                const nsIFrame* = nullptr) = 0;
 
   /**
    * Return the border for the widget, in device pixels.
@@ -153,7 +153,7 @@ class nsITheme : public nsISupports {
    * Get the preferred content-box size of a checkbox / radio button, in app
    * units.  Historically 9px.
    */
-  virtual mozilla::CSSCoord GetCheckboxRadioPrefSize() {
+  virtual mozilla::CSSCoord GetCheckboxRadioPrefSize(nsIFrame*) {
     return mozilla::CSSCoord(9.0f);
   }
 
@@ -165,6 +165,11 @@ class nsITheme : public nsISupports {
   /* Get the minimum size of a themed range */
   virtual mozilla::CSSCoord GetMinimumRangeThumbSize() {
     return mozilla::CSSCoord(20.0f);
+  }
+
+  // Whether the widget background includes its anonymous subparts.
+  virtual bool ThemeDrawsWidgetChildren(nsIFrame*, StyleAppearance) {
+    return true;
   }
 
   /**

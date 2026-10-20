@@ -11,6 +11,7 @@
 #include "mozilla/DebugOnly.h"
 #include "mozilla/Maybe.h"
 #include "mozilla/ProfilerLabels.h"
+#include "mozilla/StaticPrefs_widget.h"
 #include "mozilla/ToString.h"
 #include "nsCOMPtr.h"
 #include "nsCSSVisitedDependentPropList.h"
@@ -248,6 +249,37 @@ nsChangeHint ComputedStyle::CalcStyleDifference(const ComputedStyle& aNewStyle,
       hint |= nsChangeHint_AllReflowHints | nsChangeHint_RepaintFrame;
     }
   }
+
+  if (HasAuthorSpecifiedPadding() != aNewStyle.HasAuthorSpecifiedPadding() &&
+      StyleDisplay()->EffectiveAppearance() != StyleAppearance::None) {
+    hint |= nsChangeHint_AllReflowHints | nsChangeHint_RepaintFrame;
+  }
+
+#ifdef XP_WIN
+  const auto* oldUI = StyleUI();
+  const auto* newUI = aNewStyle.StyleUI();
+  const bool colorSchemeChanged = oldUI->mColorScheme != newUI->mColorScheme;
+  bool themeMetricsChanged =
+      colorSchemeChanged &&
+      StyleDisplay()->EffectiveAppearance() != StyleAppearance::None;
+  const auto scrollbarMode =
+      StaticPrefs::widget_non_native_theme_scrollbar_enabled();
+  if (scrollbarMode != 0 && scrollbarMode != 1) {
+    themeMetricsChanged |=
+        colorSchemeChanged ||
+        oldUI->HasCustomScrollbars() != newUI->HasCustomScrollbars();
+    if (!(newUI->mColorScheme.bits &
+          (StyleColorSchemeFlags::LIGHT | StyleColorSchemeFlags::DARK))) {
+      // Background changes can switch transparent descendants' scrollbar theme.
+      themeMetricsChanged |=
+          StyleBackground()->mBackgroundColor.CalcColor(*this) !=
+          aNewStyle.StyleBackground()->mBackgroundColor.CalcColor(aNewStyle);
+    }
+  }
+  if (themeMetricsChanged) {
+    hint |= nsChangeHint_AllReflowHints | nsChangeHint_RepaintFrame;
+  }
+#endif
 
   MOZ_ASSERT(NS_IsHintSubset(hint, nsChangeHint_AllHints),
              "Added a new hint without bumping AllHints?");

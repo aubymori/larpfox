@@ -132,9 +132,14 @@ void nsRangeFrame::BuildDisplayList(nsDisplayListBuilder* aBuilder,
   const nsStyleDisplay* disp = StyleDisplay();
   if (IsThemed(disp)) {
     DisplayBorderBackgroundOutline(aBuilder, aLists);
-    // Don't paint our children, but let the thumb be hittable for events.
+    // Native themes paint the thumb separately; other themes only need its hit
+    // target.
     if (auto* thumb = mThumbDiv->GetPrimaryFrame();
-        thumb && aBuilder->IsForEventDelivery() && !HidesContent()) {
+        thumb &&
+        (!PresContext()->Theme()->ThemeDrawsWidgetChildren(
+             this, disp->EffectiveAppearance()) ||
+         aBuilder->IsForEventDelivery()) &&
+        !HidesContent()) {
       nsDisplayListSet set(aLists, aLists.Content());
       BuildDisplayListForChild(aBuilder, thumb, set, DisplayChildFlag::Inline);
     }
@@ -321,7 +326,9 @@ Decimal nsRangeFrame::GetValueAtEventPoint(WidgetGUIEvent* aEvent) {
 
   nsRect rangeRect;
   nsSize thumbSize;
-  if (IsThemed()) {
+  nsIFrame* thumbFrame = mThumbDiv->GetPrimaryFrame();
+  if (IsThemed() && PresContext()->Theme()->ThemeDrawsWidgetChildren(
+                        this, StyleDisplay()->EffectiveAppearance())) {
     // Themed ranges draw on the border-box rect.
     rangeRect = GetRectRelativeToSelf();
     // We need to get the size of the thumb from the theme.
@@ -331,7 +338,6 @@ Decimal nsRangeFrame::GetValueAtEventPoint(WidgetGUIEvent* aEvent) {
     thumbSize = nsSize(min, min);
   } else {
     rangeRect = GetContentRectRelativeToSelf();
-    nsIFrame* thumbFrame = mThumbDiv->GetPrimaryFrame();
     if (thumbFrame) {  // diplay:none?
       thumbSize = thumbFrame->GetSize();
     }

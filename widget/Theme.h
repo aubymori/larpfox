@@ -76,7 +76,7 @@ class Theme : protected nsNativeTheme, public nsITheme {
                                            StyleAppearance) override;
   Transparency GetWidgetTransparency(nsIFrame*, StyleAppearance) override;
   bool WidgetAttributeChangeRequiresRepaint(StyleAppearance,
-                                            nsAtom* aAttribute) final;
+                                            nsAtom* aAttribute) override;
   bool WidgetAppearanceDependsOnWindowFocus(StyleAppearance) override;
   /*bool NeedToClearBackgroundBehindWidget(
       nsIFrame*, StyleAppearance) override;*/
@@ -87,9 +87,10 @@ class Theme : protected nsNativeTheme, public nsITheme {
   bool ThemeNeedsComboboxDropmarker() override;
 
   LayoutDeviceIntCoord GetScrollbarSize(const nsPresContext*,
-                                        StyleScrollbarWidth, Overlay) final;
+                                        StyleScrollbarWidth, Overlay,
+                                        const nsIFrame* = nullptr) override;
 
-  CSSCoord GetCheckboxRadioPrefSize() override;
+  CSSCoord GetCheckboxRadioPrefSize(nsIFrame*) override;
 
   static UniquePtr<ScrollbarDrawing> ScrollbarStyle();
 

@@ -30,9 +30,10 @@ NS_QUERYFRAME_HEAD(nsCheckboxRadioFrame)
 NS_QUERYFRAME_TAIL_INHERITING(nsAtomicContainerFrame)
 
 nscoord nsCheckboxRadioFrame::DefaultSize() {
-  const CSSCoord size = StyleDisplay()->HasNativeAppearance()
-                            ? PresContext()->Theme()->GetCheckboxRadioPrefSize()
-                            : CSSCoord(13.0f);
+  const CSSCoord size =
+      StyleDisplay()->HasNativeAppearance()
+          ? PresContext()->Theme()->GetCheckboxRadioPrefSize(this)
+          : CSSCoord(13.0f);
   return CSSPixel::ToAppUnits(Style()->EffectiveZoom().Zoom(size));
 }
 

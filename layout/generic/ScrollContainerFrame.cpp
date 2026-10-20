@@ -1228,7 +1228,7 @@ nsMargin ScrollContainerFrame::IntrinsicScrollbarGutterSize() const {
     // dimension, check if a scrollbar is always shown at that dimension.
     ScrollStyles scrollStyles = GetScrollStyles();
     const nscoord scrollbarSize =
-        GetNonOverlayScrollbarSize(PresContext(), styleScrollbarWidth);
+        GetNonOverlayScrollbarSize(styleScrollbarWidth);
     if (gutter.LeftRight() == 0 &&
         scrollStyles.mVertical == StyleOverflow::Scroll) {
       (IsScrollbarOnRight() ? gutter.right : gutter.left) = scrollbarSize;
@@ -1266,7 +1266,7 @@ nsMargin ScrollContainerFrame::ComputeStableScrollbarGutter(
       bool(aStyleScrollbarGutter & StyleScrollbarGutter::BOTH_EDGES);
   const bool isVerticalWM = GetWritingMode().IsVertical();
   const nscoord scrollbarSize =
-      GetNonOverlayScrollbarSize(PresContext(), aStyleScrollbarWidth);
+      GetNonOverlayScrollbarSize(aStyleScrollbarWidth);
 
   nsMargin scrollbarGutter;
   if (bothEdges) {
@@ -1719,7 +1719,7 @@ nsMargin ScrollContainerFrame::GetDesiredScrollbarSizes() const {
   ScrollStyles styles = GetScrollStyles();
   nsMargin result(0, 0, 0, 0);
 
-  auto size = GetNonOverlayScrollbarSize(PresContext(), scrollbarWidth);
+  auto size = GetNonOverlayScrollbarSize(scrollbarWidth);
   if (styles.mVertical != StyleOverflow::Hidden) {
     if (IsScrollbarOnRight()) {
       result.right = size;
@@ -1738,10 +1738,11 @@ nsMargin ScrollContainerFrame::GetDesiredScrollbarSizes() const {
 }
 
 nscoord ScrollContainerFrame::GetNonOverlayScrollbarSize(
-    const nsPresContext* aPc, StyleScrollbarWidth aScrollbarWidth) {
-  const auto size = aPc->Theme()->GetScrollbarSize(aPc, aScrollbarWidth,
-                                                   nsITheme::Overlay::No);
-  return aPc->DevPixelsToAppUnits(size);
+    StyleScrollbarWidth aScrollbarWidth) const {
+  const auto* pc = PresContext();
+  const auto size = pc->Theme()->GetScrollbarSize(pc, aScrollbarWidth,
+                                                  nsITheme::Overlay::No, this);
+  return pc->DevPixelsToAppUnits(size);
 }
 
 void ScrollContainerFrame::HandleScrollbarStyleSwitching() {
@@ -6879,8 +6880,7 @@ void ScrollContainerFrame::LayoutScrollbars(ScrollReflowInput& aState,
     //
     // TODO(emilio): Should this really account for scrollbar-width?
     auto scrollbarWidth = ScrollbarWidth();
-    const nscoord scrollbarSize =
-        GetNonOverlayScrollbarSize(pc, scrollbarWidth);
+    const nscoord scrollbarSize = GetNonOverlayScrollbarSize(scrollbarWidth);
     ReflowInput resizerRI(pc, aState.mReflowInput, mResizerBox,
                           LogicalSize(mResizerBox->GetWritingMode()));
     nsSize resizerMinSize = {resizerRI.ComputedMinWidth(),

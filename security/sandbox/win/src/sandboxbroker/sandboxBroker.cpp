@@ -1027,22 +1027,8 @@ void SandboxBroker::SetSecurityLevelForContentProcess(int32_t aSandboxLevel,
   // avoid changing their meaning.
   MOZ_RELEASE_ASSERT(aSandboxLevel >= 1,
                      "Should not be called with aSandboxLevel < 1");
-  if (aSandboxLevel >= 20) {
-    jobLevel = sandbox::JobLevel::kLockdown;
-    accessTokenLevel = sandbox::USER_LOCKDOWN;
-    initialIntegrityLevel = sandbox::INTEGRITY_LEVEL_LOW;
-    delayedIntegrityLevel = sandbox::INTEGRITY_LEVEL_UNTRUSTED;
-  } else if (aSandboxLevel >= 9) {
-    jobLevel = sandbox::JobLevel::kLockdown;
-    accessTokenLevel = sandbox::USER_LOCKDOWN_WITH_TRAVERSE;
-    initialIntegrityLevel = sandbox::INTEGRITY_LEVEL_LOW;
-    delayedIntegrityLevel = sandbox::INTEGRITY_LEVEL_UNTRUSTED;
-  } else if (aSandboxLevel >= 8) {
-    jobLevel = sandbox::JobLevel::kLockdown;
-    accessTokenLevel = sandbox::USER_RESTRICTED;
-    initialIntegrityLevel = sandbox::INTEGRITY_LEVEL_LOW;
-    delayedIntegrityLevel = sandbox::INTEGRITY_LEVEL_UNTRUSTED;
-  } else if (aSandboxLevel >= 7) {
+  // Native UXTheme access requires USER_LIMITED even at higher sandbox levels.
+  if (aSandboxLevel >= 7) {
     jobLevel = sandbox::JobLevel::kLockdown;
     accessTokenLevel = sandbox::USER_LIMITED;
     initialIntegrityLevel = sandbox::INTEGRITY_LEVEL_LOW;
@@ -1111,7 +1097,8 @@ void SandboxBroker::SetSecurityLevelForContentProcess(int32_t aSandboxLevel,
   }
 
   if (aSandboxLevel > 4) {
-    config->SetDesktop(sandbox::Desktop::kAlternateWinstation);
+    // UXTheme needs the interactive window station, but not its desktop.
+    config->SetDesktop(sandbox::Desktop::kAlternateDesktop);
   }
 
   if (StaticPrefs::security_sandbox_content_close_ksecdd_handle()) {

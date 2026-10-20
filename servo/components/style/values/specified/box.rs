@@ -1951,6 +1951,103 @@ pub enum Appearance {
     #[parse(condition = "ParserContext::chrome_rules_enabled")]
     MozMacDisclosureButtonOpen,
 
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    CheckboxContainer,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Checkmenuitem,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Groupbox,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    InnerSpinButton,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Listitem,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Menuarrow,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Menubar,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Menucheckbox,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Menuimage,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Menuitem,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Menuitemtext,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MenulistTextfield,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Menuradio,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Menuseparator,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MozWinBrowsertabbarToolbox,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MozWinCommunicationsToolbox,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MozWinMediaToolbox,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MozWindowButtonBoxMaximized,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MozWindowFrameBottom,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MozWindowFrameLeft,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MozWindowFrameRight,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    ProgressbarVertical,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Progresschunk,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    RadioContainer,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Radiomenuitem,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    RangeThumb,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Resizer,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Resizerpanel,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    ScaleHorizontal,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    ScaleVertical,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    ScalethumbHorizontal,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    ScalethumbVertical,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Scrollbar,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    ScrollbarNonDisappearing,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    ScrollbarSmall,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Separator,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Statusbar,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Statusbarpanel,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Tab,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Tabpanel,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Tabpanels,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Toolbar,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Toolbox,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Treeheadercell,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Treeheadersortarrow,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Treeitem,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Treetwistyopen,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    Treeview,
+
     /// A themed focus outline (for outline:auto).
     ///
     /// This isn't exposed to CSS at all, just here for convenience.

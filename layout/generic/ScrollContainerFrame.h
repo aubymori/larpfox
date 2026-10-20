@@ -937,8 +937,7 @@ class ScrollContainerFrame : public nsContainerFrame,
   ScrollMode ScrollModeForScrollBehavior(
       dom::ScrollBehavior aBehavior = dom::ScrollBehavior::Auto) const;
 
-  static nscoord GetNonOverlayScrollbarSize(const nsPresContext*,
-                                            StyleScrollbarWidth);
+  nscoord GetNonOverlayScrollbarSize(StyleScrollbarWidth) const;
 
   void ScrollByCSSPixelsInternal(
       const CSSPoint& aDelta, ScrollMode aMode = ScrollMode::Instant,

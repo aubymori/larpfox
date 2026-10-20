@@ -159,6 +159,7 @@ static constexpr nsLiteralCString kPrefs[] = {
     "widget.non-native-theme.win.scrollbar.use-system-size"_ns,
     "widget.non-native-theme.scrollbar.size.override"_ns,
     "widget.non-native-theme.scrollbar.style"_ns,
+    "widget.non-native-theme.scrollbar.enabled"_ns,
 };
 
 void Theme::Init() {
@@ -1472,11 +1473,14 @@ bool Theme::GetWidgetOverflow(nsDeviceContext* aContext, nsIFrame* aFrame,
 
 LayoutDeviceIntCoord Theme::GetScrollbarSize(const nsPresContext* aPresContext,
                                              StyleScrollbarWidth aWidth,
-                                             Overlay aOverlay) {
+                                             Overlay aOverlay,
+                                             const nsIFrame*) {
   return GetScrollbarDrawing().GetScrollbarSize(aPresContext, aWidth, aOverlay);
 }
 
-CSSCoord Theme::GetCheckboxRadioPrefSize() { return kCheckboxRadioSize; }
+CSSCoord Theme::GetCheckboxRadioPrefSize(nsIFrame*) {
+  return kCheckboxRadioSize;
+}
 
 /* static */
 UniquePtr<ScrollbarDrawing> Theme::ScrollbarStyle() {

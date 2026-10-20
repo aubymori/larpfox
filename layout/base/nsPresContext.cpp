@@ -1777,7 +1777,7 @@ nsITheme* nsPresContext::Theme() const {
 
 void nsPresContext::EnsureTheme() {
   MOZ_ASSERT(!mTheme);
-  if (Document()->ShouldAvoidNativeTheme()) {
+  if (mInRDMPane || Document()->ShouldAvoidNativeTheme()) {
     if (mInRDMPane) {
       mTheme = do_GetRDMThemeDoNotUseDirectly();
     } else {

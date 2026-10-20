@@ -143,6 +143,9 @@ bitflags! {
 
         /// Whether this style uses an element-scoped `random()`.
         const USES_ELEMENT_SCOPED_RANDOM = 1 << 29;
+
+        /// Whether padding is author-specified, including explicit zero padding.
+        const HAS_AUTHOR_SPECIFIED_PADDING = 1 << 30;
     }
 }
 
