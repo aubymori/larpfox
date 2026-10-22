@@ -4,17 +4,21 @@
 
 #include "nsUXThemeData.h"
 
+#include <dwmapi.h>
+
 #include <algorithm>
 #include <cmath>
 #include <cwchar>
 
 #include "WinUtils.h"
 #include "mozilla/Assertions.h"
+#include "mozilla/StaticPrefs_widget.h"
 
 using mozilla::Some;
 
 nsUXThemeData::ThemeHandle nsUXThemeData::sThemes[eUXNumClasses];
 SIZE nsUXThemeData::sCommandButtonMetrics[CMDBUTTONIDX_BUTTONBOX];
+mozilla::Maybe<SIZE> nsUXThemeData::sCommandButtonBoxMetrics;
 bool nsUXThemeData::sCommandButtonMetricsInitialized = false;
 bool nsUXThemeData::sTitlebarInfoPopulated = false;
 bool nsUXThemeData::sNativeThemeInfoInitialized = false;
@@ -48,6 +52,7 @@ void nsUXThemeData::Invalidate() {
     theme.Close();
   }
   sCommandButtonMetricsInitialized = false;
+  sCommandButtonBoxMetrics.reset();
   sTitlebarInfoPopulated = false;
   sNativeThemeInfoInitialized = false;
 }
@@ -131,17 +136,46 @@ SIZE nsUXThemeData::GetCommandButtonMetrics(CmdButtonIdx aMetric) {
 }
 
 SIZE nsUXThemeData::GetCommandButtonBoxMetrics() {
-  EnsureCommandButtonMetrics();
   SIZE size = {};
-  for (const auto& button : sCommandButtonMetrics) {
-    size.cx += button.cx;
-    size.cy = std::max(size.cy, button.cy);
+  if (sCommandButtonBoxMetrics) {
+    size = *sCommandButtonBoxMetrics;
+  } else {
+    EnsureCommandButtonMetrics();
+    for (const auto& button : sCommandButtonMetrics) {
+      size.cx += button.cx;
+      size.cy = std::max(size.cy, button.cy);
+    }
+  }
+  if (int32_t width = mozilla::StaticPrefs::
+          widget_native_controls_override_aero_caption_buttons_mask_width();
+      width > 0) {
+    size.cx = width;
+  }
+  if (int32_t height = mozilla::StaticPrefs::
+          widget_native_controls_override_aero_caption_buttons_mask_height();
+      height > 0) {
+    size.cy = height;
   }
   return size;
 }
 
 void nsUXThemeData::UpdateTitlebarInfo(HWND aWindow) {
-  if (!aWindow || sTitlebarInfoPopulated) {
+  if (!aWindow) {
+    return;
+  }
+  const double scale = mozilla::widget::WinUtils::SystemScaleFactor() /
+                       mozilla::widget::WinUtils::LogToPhysFactor(aWindow);
+  if (!sCommandButtonBoxMetrics) {
+    RECT bounds;
+    if (SUCCEEDED(::DwmGetWindowAttribute(aWindow, DWMWA_CAPTION_BUTTON_BOUNDS,
+                                          &bounds, sizeof(bounds))) &&
+        bounds.right - bounds.left > 3 && bounds.bottom - bounds.top > 1) {
+      sCommandButtonBoxMetrics = Some(
+          SIZE{LONG(std::lround((bounds.right - bounds.left - 3) * scale)),
+               LONG(std::lround((bounds.bottom - bounds.top - 1) * scale))});
+    }
+  }
+  if (sTitlebarInfoPopulated) {
     return;
   }
   TITLEBARINFOEX info = {};
@@ -156,8 +190,6 @@ void nsUXThemeData::UpdateTitlebarInfo(HWND aWindow) {
       return;
     }
   }
-  const double scale = mozilla::widget::WinUtils::SystemScaleFactor() /
-                       mozilla::widget::WinUtils::LogToPhysFactor(aWindow);
   for (size_t i = 0; i < CMDBUTTONIDX_BUTTONBOX; ++i) {
     const RECT& rect = info.rgrect[indices[i]];
     sCommandButtonMetrics[i] = {

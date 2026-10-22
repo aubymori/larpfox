@@ -163,14 +163,15 @@ bool nsWindow::OnPaint() {
   WebRenderLayerManager* layerManager = renderer->AsWebRender();
   const bool isFallback =
       renderer->GetBackendType() == LayersBackend::LAYERS_NONE;
-  const bool isTransparent = mTransparencyMode == TransparencyMode::Transparent;
+  const bool isTransparent = mTransparencyMode != TransparencyMode::Opaque;
   MOZ_ASSERT(
       isFallback || renderer->GetBackendType() == LayersBackend::LAYERS_WR,
       "Unknown layers backend");
 
   const bool didResize = mBounds.Size() != mLastPaintBounds.Size();
 
-  if (didResize && knowsCompositor && layerManager) {
+  if (didResize && knowsCompositor && layerManager &&
+      !layerManager->WindowClipChanged()) {
     // Do an early async composite so that we at least have something on the
     // screen in the right place, even if the content is out of date.
     layerManager->ScheduleComposite(wr::RenderReasons::WIDGET);

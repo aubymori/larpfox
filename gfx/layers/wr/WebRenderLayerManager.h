@@ -25,10 +25,11 @@
 #include "mozilla/layers/ScrollableLayerGuid.h"  // for ScrollableLayerGuid, ScrollableLayerGuid::ViewID
 #include "mozilla/layers/WebRenderCommandBuilder.h"  // for WebRenderCommandBuilder
 #include "mozilla/layers/WebRenderScrollData.h"      // for WebRenderScrollData
-#include "nsHashKeys.h"                              // for nsRefPtrHashKey
-#include "nsRegion.h"                                // for nsIntRegion
-#include "nsStringFwd.h"                             // for nsCString, nsAString
-#include "nsTArray.h"                                // for nsTArray
+#include "mozilla/widget/WindowButtonMask.h"
+#include "nsHashKeys.h"   // for nsRefPtrHashKey
+#include "nsRegion.h"     // for nsIntRegion
+#include "nsStringFwd.h"  // for nsCString, nsAString
+#include "nsTArray.h"     // for nsTArray
 #include "nsTHashSet.h"
 
 class gfxContext;
@@ -119,6 +120,7 @@ class WebRenderLayerManager final : public WindowRenderer {
   void SendInvalidRegion(const nsIntRegion& aRegion);
 
   void ScheduleComposite(wr::RenderReasons aReasons);
+  bool WindowClipChanged() const;
 
   void SetNeedsComposite(bool aNeedsComposite) {
     mNeedsComposite = aNeedsComposite;
@@ -272,6 +274,9 @@ class WebRenderLayerManager final : public WindowRenderer {
 
   RenderRootStateManager mStateManager;
   UniquePtr<wr::DisplayListBuilder> mDLBuilder;
+  Maybe<widget::WindowButtonMask> mWindowButtonMask;
+  LayoutDeviceIntSize mWindowClipSize;
+  LayoutDeviceIntMargin mClientContentInsets;
 
   ScrollUpdatesMap mPendingScrollUpdates;
 

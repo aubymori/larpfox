@@ -1837,6 +1837,10 @@ void nsWindow::Show(bool aState) {
     TaskbarConcealer::OnWindowShown(this);
   }
 
+  if (HasGlass()) {
+    UpdateNativeCaptionGeometry();
+    UpdateOpaqueRegionInternal();
+  }
   if (!wasVisible && aState) {
     Invalidate();
     if (syncInvalidate && !mInDtor && !mOnDestroyCalled) {
@@ -2809,7 +2813,8 @@ bool nsWindow::UpdateNonClientMargins(bool aReflowWindow) {
     // We make the entire frame part of the client area. We leave the default
     // frame sizes for left, right and bottom since Windows will automagically
     // position the edges "offscreen" for maximized windows.
-    metrics.mOffset.top = metrics.mCaptionHeight;
+    // DWM hover needs the top resize border inside the glass client.
+    metrics.mOffset.top = metrics.mCaptionHeight + GetClientContentInsets().top;
   } else if (mPiPType == PiPType::MediaPiP &&
              !StaticPrefs::widget_windows_pip_decorations_enabled()) {
     metrics.mOffset = metrics.DefaultMargins();
@@ -2817,6 +2822,7 @@ bool nsWindow::UpdateNonClientMargins(bool aReflowWindow) {
     metrics.mOffset = NormalWindowNonClientOffset();
   }
 
+  UpdateNativeCaptionGeometry();
   UpdateOpaqueRegionInternal();
   if (aReflowWindow) {
     // Force a reflow of content based on the new client
@@ -2844,6 +2850,8 @@ void nsWindow::SetCustomTitlebar(bool aCustomTitlebar) {
   mCustomTitlebarOnceChromeShows.reset();
 
   mCustomNonClient = aCustomTitlebar;
+  UpdateNativeCaptionGeometry();
+  UpdateOpaqueRegionInternal();
 
   // Force a reflow of content based on the new client dimensions.
   if (mCustomNonClient) {
@@ -3114,6 +3122,10 @@ void nsWindow::HideWindowChrome(bool aShouldHide) {
 
   mOldStyles = Some(oldChrome);
   SetWindowStyles(hwnd, kChromeStylesMask.merge(chromeless, newChrome));
+  UpdateNativeCaptionGeometry();
+  if (HasGlass()) {
+    UpdateOpaqueRegionInternal();
+  }
 }
 
 /**************************************************************
@@ -4797,6 +4809,11 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
     return true;
   }
 
+  if (UsesNativeCaptionButtons() &&
+      ::DwmDefWindowProc(mWnd, msg, wParam, lParam, aRetValue)) {
+    return true;
+  }
+
   // The preference whether to use a different keyboard layout for each
   // window is cached, and updating it will not take effect until the
   // next restart. We read the preference here and not upon WM_ACTIVATE to make
@@ -4887,9 +4904,20 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
     } break;
 
     case WM_THEMECHANGED: {
+      nsUXThemeData::Invalidate();
+      RefreshGlassCapability();
       // Update non-client margin offsets
       UpdateNonClientMargins();
       // Invalidate the window so that the repaint will pick up the new theme.
+      Invalidate(true, true, true);
+    } break;
+
+    case WM_DWMCOMPOSITIONCHANGED: {
+      RefreshGlassCapability();
+      if (!UpdateNonClientMargins()) {
+        UpdateNativeCaptionGeometry();
+        UpdateOpaqueRegionInternal();
+      }
       Invalidate(true, true, true);
     } break;
 
@@ -4947,7 +4975,7 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
     }
 
     case WM_GETTITLEBARINFOEX: {
-      if (!mCustomNonClient) {
+      if (!mCustomNonClient || UsesNativeCaptionButtons()) {
         break;
       }
       auto* info = reinterpret_cast<TITLEBARINFOEX*>(lParam);
@@ -5047,7 +5075,7 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
       }
 
     case WM_NCACTIVATE: {
-      if (!mCustomNonClient) {
+      if (!mCustomNonClient || UsesNativeCaptionButtons()) {
         break;
       }
 
@@ -5616,6 +5644,9 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
     }
 
     case WM_NCLBUTTONDBLCLK:
+      if (UsesNativeCaptionButtons() && IsWindowButton(int32_t(wParam))) {
+        break;
+      }
       DispatchMouseEvent(eMouseDoubleClick, 0, lParamToClient(lParam), false,
                          MouseButton::ePrimary, MOUSE_INPUT_SOURCE());
       result = DispatchMouseEvent(eMouseUp, 0, lParamToClient(lParam), false,
@@ -5640,7 +5671,8 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
         mDraggingWindowWithMouse = true;
       }
 
-      if (IsWindowButton(int32_t(wParam)) && mCustomNonClient) {
+      if (IsWindowButton(int32_t(wParam)) && mCustomNonClient &&
+          !UsesNativeCaptionButtons()) {
         DispatchMouseEvent(eMouseDown, wParamFromGlobalMouseState(),
                            lParamToClient(lParam), false, MouseButton::ePrimary,
                            MOUSE_INPUT_SOURCE(), nullptr, IsNonclient::Yes);
@@ -5651,7 +5683,7 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
     }
 
     case WM_NCLBUTTONUP: {
-      if (mCustomNonClient) {
+      if (mCustomNonClient && !UsesNativeCaptionButtons()) {
         result = DispatchMouseEvent(eMouseUp, wParamFromGlobalMouseState(),
                                     lParamToClient(lParam), false,
                                     MouseButton::ePrimary, MOUSE_INPUT_SOURCE(),
@@ -5790,6 +5822,9 @@ bool nsWindow::ProcessMessageInternal(UINT msg, WPARAM& wParam, LPARAM& lParam,
       WINDOWPOS* wp = (LPWINDOWPOS)lParam;
       OnWindowPosChanged(wp);
       TaskbarConcealer::OnWindowPosChanged(this);
+      if (HasGlass()) {
+        UpdateNativeCaptionGeometry();
+      }
       // We don't set result = true here so that the Windows app sdk
       // can process this message if necessary.
     } break;
@@ -6187,15 +6222,17 @@ int32_t nsWindow::ClientMarginHitTestPoint(int32_t aX, int32_t aY) {
   }
 
   auto pt = mCachedHitTestPoint;
+  const auto& buttonRects =
+      UsesNativeCaptionButtons() ? mNativeWindowBtnRect : mWindowBtnRect;
 
-  if (mWindowBtnRect[WindowButtonType::Minimize].Contains(pt)) {
+  if (buttonRects[WindowButtonType::Minimize].Contains(pt)) {
     testResult = HTMINBUTTON;
-  } else if (mWindowBtnRect[WindowButtonType::Maximize].Contains(pt)) {
+  } else if (buttonRects[WindowButtonType::Maximize].Contains(pt)) {
 #ifdef ACCESSIBILITY
     a11y::Compatibility::SuppressA11yForSnapLayouts();
 #endif
     testResult = HTMAXBUTTON;
-  } else if (mWindowBtnRect[WindowButtonType::Close].Contains(pt)) {
+  } else if (buttonRects[WindowButtonType::Close].Contains(pt)) {
     testResult = HTCLOSE;
   } else if (!inResizeRegion) {
     // If we're in the resize region, avoid overriding that with either a
@@ -6214,6 +6251,14 @@ int32_t nsWindow::ClientMarginHitTestPoint(int32_t aX, int32_t aY) {
 }
 
 bool nsWindow::IsSimulatedClientArea(int32_t screenX, int32_t screenY) {
+  if (mNativeCaptionButtonRect) {
+    POINT point{screenX, screenY};
+    if (::ScreenToClient(mWnd, &point) &&
+        mNativeCaptionButtonRect->Contains(
+            LayoutDeviceIntPoint(point.x, point.y))) {
+      return false;
+    }
+  }
   int32_t testResult = ClientMarginHitTestPoint(screenX, screenY);
   return testResult == HTCAPTION || IsWindowButton(testResult);
 }
@@ -7026,6 +7071,10 @@ void nsWindow::OnDestroy() {
 
 // Send a resize message to the listener
 void nsWindow::OnResize(const LayoutDeviceIntSize& aSize) {
+  UpdateNativeCaptionGeometry();
+  if (HasGlass()) {
+    UpdateOpaqueRegionInternal();
+  }
   if (mCompositorWidgetDelegate &&
       !mCompositorWidgetDelegate->OnWindowResize(aSize)) {
     return;
@@ -7044,6 +7093,10 @@ void nsWindow::OnResize(const LayoutDeviceIntSize& aSize) {
 
 void nsWindow::OnSizeModeChange() {
   const nsSizeMode mode = mFrameState->GetSizeMode();
+  UpdateNativeCaptionGeometry();
+  if (HasGlass()) {
+    UpdateOpaqueRegionInternal();
+  }
 
   MOZ_LOG(gWindowsLog, LogLevel::Info,
           ("nsWindow::OnSizeModeChange() sizeMode %d", mode));
@@ -7274,6 +7327,186 @@ a11y::LocalAccessible* nsWindow::GetAccessible() {
 }
 #endif
 
+void nsWindow::RefreshGlassCapability() {
+  mGlassCompositionEnabled = false;
+  mGlassWindowThemeAvailable = false;
+  if (!HasGlass()) {
+    return;
+  }
+  BOOL enabled = FALSE;
+  mGlassCompositionEnabled =
+      SUCCEEDED(::DwmIsCompositionEnabled(&enabled)) && enabled;
+  mGlassWindowThemeAvailable =
+      nsUXThemeData::GetTheme(eUXWindowFrame) != nullptr;
+}
+
+bool nsWindow::UsesNativeCaptionButtons() const {
+  return mNativeCaptionButtonRect.isSome();
+}
+
+LayoutDeviceIntMargin nsWindow::GetClientContentInsets() const {
+  if (HasGlass() && mGlassCompositionEnabled && mGlassWindowThemeAvailable &&
+      mCustomNonClient && !mHideChrome &&
+      mCustomNonClientMetrics.mCaptionHeight > 0 &&
+      mFrameState->GetSizeMode() == nsSizeMode_Maximized) {
+    return LayoutDeviceIntMargin(mCustomNonClientMetrics.mVertResizeMargin, 0,
+                                 0, 0);
+  }
+  return {};
+}
+
+Maybe<widget::WindowButtonMask> nsWindow::GetWindowButtonMask() const {
+  if (!mNativeCaptionButtonRect) {
+    return Nothing();
+  }
+  auto rect = *mNativeCaptionButtonRect;
+  const bool maximized = mFrameState->GetSizeMode() == nsSizeMode_Maximized;
+  if (mWindowButtonBoxRect) {
+    const auto& box = *mWindowButtonBoxRect;
+    if (StaticPrefs::
+            widget_native_controls_override_aero_caption_buttons_mask_width() >
+        0) {
+      const auto outerEdge =
+          mNativeCaptionButtonsOnLeft ? rect.X() : rect.XMost();
+      rect.SetRect(
+          mNativeCaptionButtonsOnLeft ? outerEdge : outerEdge - box.Width(),
+          rect.Y(), box.Width(), rect.Height());
+    }
+    if (!maximized ||
+        StaticPrefs::
+                widget_native_controls_override_aero_caption_buttons_mask_height() >
+            0) {
+      rect.SetRect(rect.X(), maximized ? rect.Y() : box.Y(), rect.Width(),
+                   box.Height());
+    }
+  }
+  auto radius = [&](int32_t aRadius) {
+    return std::max(0, std::min({aRadius, rect.Width() / 2, rect.Height()}));
+  };
+  return Some(widget::WindowButtonMask{
+      rect,
+      radius(StaticPrefs::
+                 widget_native_controls_aero_caption_buttons_mask_radius()),
+      maximized
+          ? radius(
+                StaticPrefs::
+                    widget_native_controls_aero_caption_buttons_mask_radius_right())
+          : 0});
+}
+
+void nsWindow::UpdateWindowButtonMask() {
+  const auto mask = GetWindowButtonMask();
+  if (mask == mWindowButtonMask) {
+    return;
+  }
+  mWindowButtonMask = mask;
+  UpdateOpaqueRegionInternal();
+  // WM_PAINT must replace the scene containing the root clip.
+  Invalidate();
+}
+
+void nsWindow::UpdateThemeGeometries(
+    const nsTArray<ThemeGeometry>& aThemeGeometries) {
+  Maybe<LayoutDeviceIntRect> boxRect;
+  for (const auto& geometry : aThemeGeometries) {
+    if (geometry.mType == nsNativeThemeWin::eThemeGeometryTypeWindowButtons) {
+      boxRect = Some(geometry.mRect);
+      break;
+    }
+  }
+  // Radius-only changes still need a replacement root scene.
+  mWindowButtonBoxRect = boxRect;
+  if (!UsesNativeCaptionButtons() && HasGlass()) {
+    UpdateNativeCaptionGeometry();
+  } else {
+    UpdateWindowButtonMask();
+  }
+}
+
+void nsWindow::UpdateNativeCaptionGeometry() {
+  const bool hadNativeButtons = UsesNativeCaptionButtons();
+  mNativeCaptionButtonRect.reset();
+  if (hadNativeButtons) {
+    mNativeWindowBtnRect = {};
+  }
+  const auto updated = MakeScopeExit([&] {
+    if (hadNativeButtons || UsesNativeCaptionButtons()) {
+      mCachedHitTestTime = TimeStamp::Now() - TimeDuration::FromMilliseconds(
+                                                  HITTEST_CACHE_LIFETIME_MS);
+    }
+    UpdateWindowButtonMask();
+  });
+  if (!mWnd || !HasGlass() || !mGlassCompositionEnabled ||
+      !mGlassWindowThemeAvailable || !mCustomNonClient || !HasCaption() ||
+      mHideChrome || mFrameState->GetSizeMode() == nsSizeMode_Fullscreen ||
+      !::IsWindowVisible(mWnd) || ::IsIconic(mWnd)) {
+    return;
+  }
+
+  RECT buttons{}, window{}, client{};
+  if (FAILED(::DwmGetWindowAttribute(mWnd, DWMWA_CAPTION_BUTTON_BOUNDS,
+                                     &buttons, sizeof(buttons))) ||
+      !::GetWindowRect(mWnd, &window) || !::GetClientRect(mWnd, &client)) {
+    return;
+  }
+  // DWM's bounds are undefined while hidden/minimized. Reject stale bounds
+  // from a previous DPI/frame configuration rather than clearing content.
+  const UINT dpi = UINT(NSToIntRound(WinUtils::LogToPhysFactor(mWnd) * 96.0));
+  const int32_t captionExtent =
+      WinUtils::GetSystemMetricsForDpi(SM_CYCAPTION, dpi) +
+      DefaultResizeMargins(dpi).mVertical;
+  if (buttons.left < 0 || buttons.top < 0 ||
+      buttons.right > window.right - window.left ||
+      buttons.bottom > window.bottom - window.top ||
+      buttons.right <= buttons.left || buttons.bottom <= buttons.top ||
+      buttons.top > captionExtent ||
+      buttons.bottom - buttons.top > 2 * captionExtent) {
+    return;
+  }
+  POINT topLeft{window.left + buttons.left, window.top + buttons.top};
+  POINT bottomRight{window.left + buttons.right, window.top + buttons.bottom};
+  if (!::ScreenToClient(mWnd, &topLeft) ||
+      !::ScreenToClient(mWnd, &bottomRight)) {
+    return;
+  }
+  LayoutDeviceIntRect rect(
+      std::min(topLeft.x, bottomRight.x), std::min(topLeft.y, bottomRight.y),
+      std::abs(bottomRight.x - topLeft.x), std::abs(bottomRight.y - topLeft.y));
+  // Native caption artwork can overhang its reported bounds by one pixel.
+  const bool buttonsOnLeft = rect.Center().x < client.right / 2;
+  mNativeCaptionButtonsOnLeft = buttonsOnLeft;
+  rect.Inflate(LayoutDeviceIntMargin(0, buttonsOnLeft ? 0 : 1, 0,
+                                     buttonsOnLeft ? 1 : 0));
+  rect = rect.Intersect(LayoutDeviceIntRect(0, 0, client.right, client.bottom));
+  if (!rect.IsEmpty()) {
+    mNativeCaptionButtonRect = Some(rect);
+    TITLEBARINFOEX info{};
+    info.cbSize = sizeof(info);
+    ::DefWindowProcW(mWnd, WM_GETTITLEBARINFOEX, 0,
+                     reinterpret_cast<LPARAM>(&info));
+    constexpr WindowButtonType types[] = {WindowButtonType::Minimize,
+                                          WindowButtonType::Maximize,
+                                          WindowButtonType::Close};
+    constexpr size_t indices[] = {2, 3, 5};
+    // DWM can decline maximized hit tests. Keep native button hot widths
+    // within the visible DWM caption strip.
+    for (size_t i = 0; i < std::size(types); ++i) {
+      const RECT& button = info.rgrect[indices[i]];
+      if (button.right <= button.left) {
+        continue;
+      }
+      POINT left{button.left, button.top};
+      POINT right{button.right, button.bottom};
+      if (::ScreenToClient(mWnd, &left) && ::ScreenToClient(mWnd, &right)) {
+        mNativeWindowBtnRect[types[i]] =
+            LayoutDeviceIntRect(std::min(left.x, right.x), rect.Y(),
+                                std::abs(right.x - left.x), rect.Height())
+                .Intersect(rect);
+      }
+    }
+  }
+}
+
 void nsWindow::SetTransparencyMode(TransparencyMode aMode) {
   if (aMode == mTransparencyMode || DestroyCalled()) {
     return;
@@ -7282,38 +7515,58 @@ void nsWindow::SetTransparencyMode(TransparencyMode aMode) {
   MOZ_ASSERT(WinUtils::GetTopLevelHWND(mWnd, true) == mWnd);
   MOZ_ASSERT(GetTopLevelWindow(true) == this);
 
+  const auto previousInsets = GetClientContentInsets();
   mTransparencyMode = aMode;
-
-  UpdateOpaqueRegionInternal();
+  RefreshGlassCapability();
+  if (previousInsets == GetClientContentInsets() || !UpdateNonClientMargins()) {
+    UpdateOpaqueRegionInternal();
+    UpdateNativeCaptionGeometry();
+  }
 
   if (mCompositorWidgetDelegate) {
     mCompositorWidgetDelegate->UpdateTransparency(aMode);
   }
+  Invalidate(true, true, true);
 }
 
-void nsWindow::UpdateOpaqueRegion(const LayoutDeviceIntRegion& aRegion) {
-  if (aRegion == mOpaqueRegion || IsPopup()) {
+void nsWindow::UpdateOpaqueRegion(const LayoutDeviceIntRegion& aRegion,
+                                  const LayoutDeviceIntRegion& aGlassRegion) {
+  if (IsPopup()) {
     // Popups don't track opaque region changes since our opaque region
     // tracking is, let's say, suboptimal (see bug 1933952).
     return;
   }
+  const auto clientSize = GetClientSize();
+  if (aRegion == mOpaqueRegion && aGlassRegion == mGlassOpaqueRegion &&
+      clientSize == mOpaqueRegionClientSize) {
+    return;
+  }
   mOpaqueRegion = aRegion;
+  mGlassOpaqueRegion = aGlassRegion;
+  mOpaqueRegionClientSize = clientSize;
   UpdateOpaqueRegionInternal();
 }
 
+const LayoutDeviceIntRegion& nsWindow::GetEffectiveOpaqueRegion() const {
+  return mWindowButtonMask ||
+                 GetClientContentInsets() != LayoutDeviceIntMargin()
+             ? mEffectiveOpaqueRegion
+             : mOpaqueRegion;
+}
+
 LayoutDeviceIntRegion nsWindow::GetTranslucentRegion() {
-  if (mTransparencyMode != TransparencyMode::Transparent) {
+  if (mTransparencyMode == TransparencyMode::Opaque) {
     return {};
   }
   const auto clientRect =
       LayoutDeviceIntRect(LayoutDeviceIntPoint(), GetClientSize());
   LayoutDeviceIntRegion translucentRegion{clientRect};
-  translucentRegion.SubOut(mOpaqueRegion);
+  translucentRegion.SubOut(GetEffectiveOpaqueRegion());
   return translucentRegion;
 }
 
 void nsWindow::MaybeInvalidateTranslucentRegion() {
-  if (mTransparencyMode != TransparencyMode::Transparent) {
+  if (mTransparencyMode == TransparencyMode::Opaque) {
     return;
   }
   const auto translucent = GetTranslucentRegion();
@@ -7331,26 +7584,81 @@ void nsWindow::MaybeInvalidateTranslucentRegion() {
 }
 
 void nsWindow::UpdateOpaqueRegionInternal() {
+  const bool glass = HasGlass() && mGlassCompositionEnabled &&
+                     mGlassWindowThemeAvailable && mCustomNonClient &&
+                     mFrameState->GetSizeMode() != nsSizeMode_Fullscreen;
+  const auto insets = GetClientContentInsets();
+  const bool hasInsets = insets != LayoutDeviceIntMargin();
+  const bool hasClip = mWindowButtonMask || hasInsets;
+  const auto liveClientSize =
+      glass || hasInsets ? GetClientSize() : LayoutDeviceIntSize();
+  if (hasClip) {
+    mEffectiveOpaqueRegion = mOpaqueRegion;
+    if (hasInsets) {
+      LayoutDeviceIntRect visibleBounds(LayoutDeviceIntPoint(), liveClientSize);
+      visibleBounds.Deflate(insets);
+      mEffectiveOpaqueRegion.AndWith(visibleBounds);
+    }
+    if (mWindowButtonMask) {
+      mEffectiveOpaqueRegion.SubOut(mWindowButtonMask->mRect);
+    }
+  } else {
+    mEffectiveOpaqueRegion.SetEmpty();
+  }
+  if (glass != mGlassFramePolicyEnabled) {
+    DWMNCRENDERINGPOLICY policy =
+        glass ? DWMNCRP_ENABLED : DWMNCRP_USEWINDOWSTYLE;
+    ::DwmSetWindowAttribute(mWnd, DWMWA_NCRENDERING_POLICY, &policy,
+                            sizeof(policy));
+    mGlassFramePolicyEnabled = glass;
+  }
+  if (glass && !mOpaqueRegion.IsEmpty() &&
+      mOpaqueRegionClientSize != liveClientSize) {
+    // Keep valid DWM edge margins until layout publishes the new client extent.
+    MaybeInvalidateTranslucentRegion();
+    return;
+  }
   MARGINS margins{0};
-  if (mTransparencyMode == TransparencyMode::Transparent) {
+  if (mTransparencyMode == TransparencyMode::Transparent || glass) {
     // If there is no opaque region, set margins to support a full sheet of
     // glass. Comments in MSDN indicate all values must be set to -1 to get a
     // full sheet of glass.
     margins = {-1, -1, -1, -1};
-    if (!mOpaqueRegion.IsEmpty()) {
-      LayoutDeviceIntRect clientBounds = GetClientBounds();
+    LayoutDeviceIntRegion glassOpaqueRegion;
+    if (glass && hasClip) {
+      glassOpaqueRegion = mGlassOpaqueRegion;
+      glassOpaqueRegion.AndWith(GetEffectiveOpaqueRegion());
+    }
+    const auto& opaqueRegion =
+        glass ? (hasClip ? glassOpaqueRegion : mGlassOpaqueRegion)
+              : GetEffectiveOpaqueRegion();
+    if (!opaqueRegion.IsEmpty()) {
+      const auto clientSize =
+          glass || hasInsets ? liveClientSize : GetClientSize();
       // Find the largest rectangle and use that to calculate the inset.
-      LayoutDeviceIntRect largest = mOpaqueRegion.GetLargestRectangle();
+      LayoutDeviceIntRect largest = opaqueRegion.GetLargestRectangle();
       margins.cxLeftWidth = largest.X();
-      margins.cxRightWidth = clientBounds.Width() - largest.XMost();
-      margins.cyBottomHeight = clientBounds.Height() - largest.YMost();
+      margins.cxRightWidth = clientSize.width - largest.XMost();
+      margins.cyBottomHeight = clientSize.height - largest.YMost();
       margins.cyTopHeight = largest.Y();
 
-      auto ncmargin = NonClientSizeMargin();
+      // Borderless glass hides DWM's two-pixel border, not the resize frame.
+      constexpr int32_t kGlassMarginAdjustment = 2;
+      auto ncmargin = glass
+                          ? LayoutDeviceIntMargin(
+                                kGlassMarginAdjustment, kGlassMarginAdjustment,
+                                kGlassMarginAdjustment, kGlassMarginAdjustment)
+                          : NonClientSizeMargin();
       margins.cxLeftWidth += ncmargin.left;
       margins.cyTopHeight += ncmargin.top;
       margins.cxRightWidth += ncmargin.right;
       margins.cyBottomHeight += ncmargin.bottom;
+    }
+    if (glass && margins.cyTopHeight >= 0) {
+      const auto& metrics = mCustomNonClientMetrics;
+      margins.cyTopHeight =
+          std::max<int32_t>(margins.cyTopHeight,
+                            metrics.mCaptionHeight + metrics.mVertResizeMargin);
     }
   }
   DwmExtendFrameIntoClientArea(mWnd, &margins);

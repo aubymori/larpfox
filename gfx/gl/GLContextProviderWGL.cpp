@@ -380,6 +380,8 @@ static RefPtr<GLContext> CreateForWidget(const HWND window,
                                         true,
                                         LOCAL_WGL_DOUBLE_BUFFER_ARB,
                                         true,
+                                        LOCAL_WGL_ALPHA_BITS_ARB,
+                                        8,
                                         LOCAL_WGL_DEPTH_BITS_ARB,
                                         24,
                                         LOCAL_WGL_ACCELERATION_ARB,
@@ -413,6 +415,8 @@ static RefPtr<GLContext> CreateForWidget(const HWND window,
                                         true,
                                         LOCAL_WGL_DOUBLE_BUFFER_ARB,
                                         true,
+                                        LOCAL_WGL_ALPHA_BITS_ARB,
+                                        8,
                                         LOCAL_WGL_DEPTH_BITS_ARB,
                                         24,
                                         0};
@@ -435,7 +439,19 @@ static RefPtr<GLContext> CreateForWidget(const HWND window,
   // EnsureInitialized, otherwise it can load/unload the dll and
   // wglCreateContext will fail.
 
-  SetPixelFormat(dc, chosenFormat, nullptr);
+  // HWND pixel formats are immutable. Reserve alpha even for initially opaque
+  // WebRender windows, so a later glass opt-in keeps its transparent pixels.
+  const int existingFormat = GetPixelFormat(dc);
+  if (existingFormat) {
+    PIXELFORMATDESCRIPTOR descriptor{};
+    if (!DescribePixelFormat(dc, existingFormat, sizeof(descriptor),
+                             &descriptor) ||
+        (isWebRender && descriptor.cAlphaBits < 8)) {
+      return nullptr;
+    }
+  } else if (!SetPixelFormat(dc, chosenFormat, nullptr)) {
+    return nullptr;
+  }
   const auto context = sWGLLib.CreateContextWithFallback(dc, false);
   if (!context) return nullptr;
 

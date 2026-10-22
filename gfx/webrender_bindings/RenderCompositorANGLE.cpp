@@ -415,19 +415,19 @@ RefPtr<IDXGISwapChain1> RenderCompositorANGLE::CreateSwapChainForDComp(
 }
 
 bool RenderCompositorANGLE::ShouldUseAlpha() const {
-  return mWidget->AsWindows()->TransparencyModeIs(
-      widget::TransparencyMode::Transparent);
+  return !mWidget->AsWindows()->TransparencyModeIs(
+      widget::TransparencyMode::Opaque);
 }
 
 bool RenderCompositorANGLE::BeginFrame() {
   mWidget->AsWindows()->UpdateCompositorWndSizeIfNecessary();
 
   if (!UseCompositor()) {
-    if (NS_WARN_IF(!mSwapChainUsingAlpha && ShouldUseAlpha())) {
+    if (mSwapChainUsingAlpha != ShouldUseAlpha()) {
       if (NS_WARN_IF(!RecreateNonNativeCompositorSwapChain())) {
         return false;
       }
-      MOZ_ASSERT(mSwapChainUsingAlpha);
+      MOZ_ASSERT(mSwapChainUsingAlpha == ShouldUseAlpha());
     }
     if (!ResizeBufferIfNeeded()) {
       return false;

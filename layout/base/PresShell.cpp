@@ -5782,8 +5782,9 @@ static SingleCanvasBackground ComputeSingleCanvasBackground(nsIFrame* aCanvas) {
   MOZ_ASSERT(aCanvas->IsCanvasFrame());
   const nsIFrame* bgFrame = nsCSSRendering::FindBackgroundFrame(aCanvas);
   static constexpr nscolor kTransparent = NS_RGBA(0, 0, 0, 0);
-  if (bgFrame->IsThemed()) {
-    // Ignore the CSS background-color if `appearance` is used on the root.
+  if (bgFrame->IsThemed() && bgFrame->StyleDisplay()->EffectiveAppearance() !=
+                                 StyleAppearance::MozWinBorderlessGlass) {
+    // Ignore the CSS background-color for themed roots other than glass.
     return {kTransparent, false};
   }
   bool drawBackgroundImage = false;

@@ -21247,6 +21247,30 @@
 #endif
 
 #ifdef XP_WIN
+# Caption button metrics in system-DPI device pixels, before native frame
+# subtraction and per-window DPI scaling. Nonpositive values use native metrics.
+- name: widget.native-controls.override-aero-caption-buttons-mask-width
+  type: int32_t
+  value: 0
+  mirror: always
+
+- name: widget.native-controls.override-aero-caption-buttons-mask-height
+  type: int32_t
+  value: 0
+  mirror: always
+
+# Circular bottom-corner radii of the visual exclusion, in client device pixels.
+# The right radius applies only to maximized windows.
+- name: widget.native-controls.aero-caption-buttons-mask-radius
+  type: int32_t
+  value: 0
+  mirror: always
+
+- name: widget.native-controls.aero-caption-buttons-mask-radius-right
+  type: int32_t
+  value: 0
+  mirror: always
+
 # WindowsUIUtils::Share to wait for user action on Windows share dialog
 # `true` means the promise resolves when user completes or cancels the share
 # action. This can be unsafe since selecting copy action fires no DataPackage

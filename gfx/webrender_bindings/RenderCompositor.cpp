@@ -309,7 +309,13 @@ void RenderCompositor::GetWindowVisibility(WindowVisibility* aVisibility) {
 }
 
 void RenderCompositor::GetWindowProperties(WindowProperties* aProperties) {
+#ifdef XP_WIN
+  auto* window = mWidget->AsWindows();
+  aProperties->is_opaque =
+      !window || window->TransparencyModeIs(widget::TransparencyMode::Opaque);
+#else
   aProperties->is_opaque = true;
+#endif
 }
 
 gfx::DeviceResetReason RenderCompositor::IsContextLost(bool aForce) {

@@ -508,6 +508,15 @@ static constexpr struct {
      widget::ThemeChangeKind::Style},
     {"widget.windows.uwp-system-colors.highlight-accent"_ns,
      widget::ThemeChangeKind::Style},
+    // Caption mask changes also affect titlebar layout and its root scene.
+    {"widget.native-controls.override-aero-caption-buttons-mask-width"_ns,
+     widget::ThemeChangeKind::StyleAndLayout},
+    {"widget.native-controls.override-aero-caption-buttons-mask-height"_ns,
+     widget::ThemeChangeKind::StyleAndLayout},
+    {"widget.native-controls.aero-caption-buttons-mask-radius"_ns,
+     widget::ThemeChangeKind::StyleAndLayout},
+    {"widget.native-controls.aero-caption-buttons-mask-radius-right"_ns,
+     widget::ThemeChangeKind::StyleAndLayout},
     // Affects env().
     {"layout.css.prefers-color-scheme.content-override"_ns,
      widget::ThemeChangeKind::Style},

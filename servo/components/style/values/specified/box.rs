@@ -2047,6 +2047,10 @@ pub enum Appearance {
     Treetwistyopen,
     #[parse(condition = "ParserContext::chrome_rules_enabled")]
     Treeview,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MozWinBorderlessGlass,
+    #[parse(condition = "ParserContext::chrome_rules_enabled")]
+    MozWinExcludeGlass,
 
     /// A themed focus outline (for outline:auto).
     ///

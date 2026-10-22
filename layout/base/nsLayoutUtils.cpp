@@ -3381,9 +3381,18 @@ void nsLayoutUtils::PaintFrame(gfxContext* aRenderingContext, nsIFrame* aFrame,
   if ((aFlags & PaintFrameFlags::WidgetLayers) &&
       !(aFlags & PaintFrameFlags::DocumentRelative)) {
     if (nsIWidget* widget = aFrame->GetNearestWidget()) {
-      const nsRegion& opaqueRegion = builder->GetWindowOpaqueRegion();
-      widget->UpdateOpaqueRegion(LayoutDeviceIntRegion::FromUnknownRegion(
-          opaqueRegion.ToNearestPixels(presContext->AppUnitsPerDevPixel())));
+      nsRegion opaqueRegion = builder->GetWindowOpaqueRegion();
+      nsRegion glassOpaqueRegion;
+      if (widget->GetTransparencyMode() == TransparencyMode::BorderlessGlass) {
+        glassOpaqueRegion.And(opaqueRegion,
+                              builder->GetWindowExcludeGlassRegion());
+      }
+      widget->UpdateOpaqueRegion(
+          LayoutDeviceIntRegion::FromUnknownRegion(
+              opaqueRegion.ToNearestPixels(presContext->AppUnitsPerDevPixel())),
+          LayoutDeviceIntRegion::FromUnknownRegion(
+              glassOpaqueRegion.ToNearestPixels(
+                  presContext->AppUnitsPerDevPixel())));
       widget->UpdateWindowDraggingRegion(builder->GetWindowDraggingRegion());
     }
   }
@@ -6824,6 +6833,11 @@ widget::TransparencyMode nsLayoutUtils::GetFrameTransparency(
 
   if (HasNonZeroCorner(aCSSRootFrame->StyleBorder()->mBorderRadius)) {
     return TransparencyMode::Transparent;
+  }
+
+  if (aCSSRootFrame->StyleDisplay()->EffectiveAppearance() ==
+      StyleAppearance::MozWinBorderlessGlass) {
+    return TransparencyMode::BorderlessGlass;
   }
 
   nsITheme::Transparency transparency;

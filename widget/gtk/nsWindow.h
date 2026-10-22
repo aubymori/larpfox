@@ -326,7 +326,8 @@ class nsWindow : public nsIWidget {
   gint GetInputRegionMarginInGdkCoords();
 
   void UpdateOpaqueRegionInternal();
-  void UpdateOpaqueRegion(const LayoutDeviceIntRegion&) override;
+  void UpdateOpaqueRegion(const LayoutDeviceIntRegion&,
+                          const LayoutDeviceIntRegion&) override;
   LayoutDeviceIntRegion GetOpaqueRegionForTesting() const override {
     return GetOpaqueRegion();
   }

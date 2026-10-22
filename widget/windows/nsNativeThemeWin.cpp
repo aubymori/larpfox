@@ -18,11 +18,13 @@
 #include "gfxWindowsSurface.h"
 #include "mozilla/ClearOnShutdown.h"
 #include "mozilla/Logging.h"
+#include "mozilla/PresShell.h"
 #include "mozilla/StaticPrefs_layout.h"
 #include "mozilla/StaticPrefs_widget.h"
 #include "mozilla/WindowsVersion.h"
 #include "mozilla/dom/XULButtonElement.h"
 #include "mozilla/gfx/Types.h"  // for Color::FromABGR
+#include "nsCSSFrameConstructor.h"
 #include "nsColor.h"
 #include "nsComboboxControlFrame.h"
 #include "nsDeviceContext.h"
@@ -60,6 +62,38 @@ nsNativeThemeWin::nsNativeThemeWin()
       mGutterSizeCacheValid(false) {}
 
 nsNativeThemeWin::~nsNativeThemeWin() { nsUXThemeData::Invalidate(); }
+
+static bool IsGlassWindow(nsIFrame* aFrame) {
+  if (!aFrame) {
+    return false;
+  }
+  nsIFrame* root =
+      aFrame->PresShell()->FrameConstructor()->GetRootElementStyleFrame();
+  return root && root->StyleDisplay()->EffectiveAppearance() ==
+                     StyleAppearance::MozWinBorderlessGlass;
+}
+
+static bool IsDwmRenderedWidget(nsIFrame* aFrame, StyleAppearance aAppearance) {
+  switch (aAppearance) {
+    case StyleAppearance::MozWinBorderlessGlass:
+      return true;
+    case StyleAppearance::MozWindowTitlebar:
+    case StyleAppearance::MozWindowTitlebarMaximized:
+    case StyleAppearance::MozWindowButtonClose:
+    case StyleAppearance::MozWindowButtonMinimize:
+    case StyleAppearance::MozWindowButtonMaximize:
+    case StyleAppearance::MozWindowButtonRestore:
+    case StyleAppearance::MozWindowButtonBox:
+    case StyleAppearance::MozWindowButtonBoxMaximized:
+      if (IsGlassWindow(aFrame)) {
+        nsIWidget* widget = aFrame->PresContext()->GetRootWidget();
+        return widget && widget->GetWindowButtonMask().isSome();
+      }
+      return false;
+    default:
+      return false;
+  }
+}
 
 bool nsNativeThemeWin::ShouldUseNonNativeScrollbar(const nsIFrame* aFrame) {
   switch (StaticPrefs::widget_non_native_theme_scrollbar_enabled()) {
@@ -870,6 +904,7 @@ mozilla::Maybe<nsUXThemeClass> nsNativeThemeWin::GetThemeClass(
     case StyleAppearance::MozWindowButtonRestore:
     case StyleAppearance::MozWindowButtonBox:
     case StyleAppearance::MozWindowButtonBoxMaximized:
+    case StyleAppearance::MozWinBorderlessGlass:
       return Some(eUXWindowFrame);
     default:
       return Nothing();
@@ -1577,6 +1612,7 @@ nsresult nsNativeThemeWin::GetThemePartAndState(nsIFrame* aFrame,
     case StyleAppearance::RadioContainer:
     case StyleAppearance::MozWindowButtonBox:
     case StyleAppearance::MozWindowButtonBoxMaximized:
+    case StyleAppearance::MozWinBorderlessGlass:
       aPart = -1;
       aState = 0;
       return NS_OK;
@@ -1614,6 +1650,9 @@ void nsNativeThemeWin::DrawWidgetBackground(
   if (ShouldUseNonNativeTheme(aFrame, aAppearance)) {
     return Theme::DrawWidgetBackground(aContext, aFrame, aAppearance, aRect,
                                        aDirtyRect, aDrawOverflow);
+  }
+  if (IsDwmRenderedWidget(aFrame, aAppearance)) {
+    return;
   }
 
   HANDLE theme = GetTheme(aAppearance);
@@ -1997,6 +2036,9 @@ bool nsNativeThemeWin::CreateWebRenderCommandsForWidget(
     const layers::StackingContextHelper& aSc,
     layers::RenderRootStateManager* aManager, nsIFrame* aFrame,
     StyleAppearance aAppearance, const nsRect& aRect) {
+  if (IsDwmRenderedWidget(aFrame, aAppearance)) {
+    return true;
+  }
   return ShouldUseNonNativeTheme(aFrame, aAppearance) &&
          Theme::CreateWebRenderCommandsForWidget(
              aBuilder, aResources, aSc, aManager, aFrame, aAppearance, aRect);
@@ -2040,6 +2082,14 @@ LayoutDeviceIntMargin nsNativeThemeWin::GetWidgetBorder(
     return Theme::GetWidgetBorder(aContext, aFrame, aAppearance);
   }
   if (IsWidgetScrollbarPart(aAppearance)) {
+    return {};
+  }
+  if (aAppearance == StyleAppearance::MozWinBorderlessGlass) {
+    if (aFrame && aFrame->Style()->IsRootElementStyle()) {
+      if (nsIWidget* widget = aFrame->PresContext()->GetRootWidget()) {
+        return widget->GetClientContentInsets();
+      }
+    }
     return {};
   }
 
@@ -2143,6 +2193,9 @@ bool nsNativeThemeWin::GetWidgetPadding(nsDeviceContext* aContext,
   if (aAppearance == StyleAppearance::MozWindowButtonBox ||
       aAppearance == StyleAppearance::MozWindowButtonBoxMaximized) {
     aResult->SizeTo(0, 0, 0, 0);
+    if (IsGlassWindow(aFrame)) {
+      return true;
+    }
 
     // button padding for standard windows
     if (aAppearance == StyleAppearance::MozWindowButtonBox) {
@@ -2156,6 +2209,9 @@ bool nsNativeThemeWin::GetWidgetPadding(nsDeviceContext* aContext,
   if (aAppearance == StyleAppearance::MozWindowTitlebar ||
       aAppearance == StyleAppearance::MozWindowTitlebarMaximized) {
     aResult->SizeTo(0, 0, 0, 0);
+    if (IsGlassWindow(aFrame)) {
+      return true;
+    }
     // XXX Maximized windows have an offscreen offset equal to
     // the border padding. This should be addressed in nsWindow,
     // but currently can't be, see UpdateNonClientMargins.
@@ -2328,6 +2384,8 @@ LayoutDeviceIntSize nsNativeThemeWin::GetMinimumWidgetSize(
   }
 
   switch (aAppearance) {
+    case StyleAppearance::MozWinBorderlessGlass:
+      return {};
     case StyleAppearance::ScrollbarHorizontal:
     case StyleAppearance::ScrollbarVertical:
     case StyleAppearance::ScrollbarthumbHorizontal:
@@ -2387,7 +2445,9 @@ LayoutDeviceIntSize nsNativeThemeWin::GetMinimumWidgetSize(
   if (aFrame && (aAppearance == StyleAppearance::MozWindowButtonClose ||
                  aAppearance == StyleAppearance::MozWindowButtonMinimize ||
                  aAppearance == StyleAppearance::MozWindowButtonMaximize ||
-                 aAppearance == StyleAppearance::MozWindowButtonRestore)) {
+                 aAppearance == StyleAppearance::MozWindowButtonRestore ||
+                 aAppearance == StyleAppearance::MozWindowButtonBox ||
+                 aAppearance == StyleAppearance::MozWindowButtonBoxMaximized)) {
     if (nsIWidget* widget = aFrame->GetNearestWidget()) {
       nsUXThemeData::UpdateTitlebarInfo(
           static_cast<HWND>(widget->GetNativeData(NS_NATIVE_WINDOW)));
@@ -2567,6 +2627,20 @@ LayoutDeviceIntSize nsNativeThemeWin::GetMinimumWidgetSize(
 
     case StyleAppearance::MozWindowButtonBox:
     case StyleAppearance::MozWindowButtonBoxMaximized:
+      if (IsGlassWindow(aFrame)) {
+        const SIZE size = nsUXThemeData::GetCommandButtonBoxMetrics();
+        result.width = size.cx;
+        result.height =
+            std::max<LONG>(0, size.cy - GetSystemMetrics(SM_CYFRAME) -
+                                  GetSystemMetrics(SM_CXPADDEDBORDER));
+        if (aAppearance == StyleAppearance::MozWindowButtonBoxMaximized) {
+          if (result.width < INT32_MAX) {
+            result.width += 1;
+          }
+          result.height = std::max(0, result.height - 2);
+        }
+        ScaleForFrameDPI(&result, aFrame);
+      }
       return result;
 
     case StyleAppearance::MozWindowFrameLeft:
@@ -2635,7 +2709,8 @@ bool nsNativeThemeWin::ThemeSupportsWidget(nsPresContext* aPresContext,
   // XXXdwh We can go even further and call the API to ask if support exists for
   // specific widgets.
 
-  if (aAppearance == StyleAppearance::FocusOutline) {
+  if (aAppearance == StyleAppearance::FocusOutline ||
+      aAppearance == StyleAppearance::MozWinBorderlessGlass) {
     return true;
   }
 
@@ -2736,6 +2811,9 @@ nsITheme::Transparency nsNativeThemeWin::GetWidgetTransparency(
     nsIFrame* aFrame, StyleAppearance aAppearance) {
   if (ShouldUseNonNativeTheme(aFrame, aAppearance)) {
     return Theme::GetWidgetTransparency(aFrame, aAppearance);
+  }
+  if (IsDwmRenderedWidget(aFrame, aAppearance)) {
+    return eTransparent;
   }
 
   switch (aAppearance) {

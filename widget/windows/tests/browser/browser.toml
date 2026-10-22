@@ -1,5 +1,8 @@
 [DEFAULT]
 
+["browser_native_aero_glass.js"]
+skip-if = ["headless"] # Requires native DWM caption buttons.
+
 ["browser_native_control_padding.js"]
 
 ["browser_native_control_subparts.js"]

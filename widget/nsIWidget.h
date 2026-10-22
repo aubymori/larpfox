@@ -28,6 +28,7 @@
 #include "mozilla/layers/ZoomConstraints.h"
 #include "mozilla/widget/IMEData.h"
 #include "mozilla/widget/InitData.h"
+#include "mozilla/widget/WindowButtonMask.h"
 #include "nsCOMPtr.h"
 #include "nsColor.h"
 #include "nsDebug.h"
@@ -1233,12 +1234,25 @@ class nsIWidget : public nsSupportsWeakReference {
    */
   virtual void UpdateThemeGeometries(const nsTArray<ThemeGeometry>&) {}
 
+  // Client device-pixel insets keeping chrome inside the visible window.
+  virtual LayoutDeviceIntMargin GetClientContentInsets() const { return {}; }
+
+  // Native caption exclusion, in client device pixels. Rendering must leave
+  // this area transparent.
+  virtual mozilla::Maybe<mozilla::widget::WindowButtonMask>
+  GetWindowButtonMask() const {
+    return mozilla::Nothing();
+  }
+
   /**
    * Informs the widget about the region of the window that is opaque.
    *
    * @param aOpaqueRegion the region of the window that is opaque.
+   * @param aGlassOpaqueRegion the opaque subset used for DWM glass margins.
    */
-  virtual void UpdateOpaqueRegion(const LayoutDeviceIntRegion& aOpaqueRegion) {}
+  virtual void UpdateOpaqueRegion(
+      const LayoutDeviceIntRegion& aOpaqueRegion,
+      const LayoutDeviceIntRegion& aGlassOpaqueRegion) {}
   virtual LayoutDeviceIntRegion GetOpaqueRegionForTesting() const { return {}; }
 
   /**

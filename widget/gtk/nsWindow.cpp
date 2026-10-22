@@ -5008,7 +5008,8 @@ LayoutDeviceIntRegion nsWindow::GetOpaqueRegion() const {
   return mOpaqueRegion;
 }
 
-void nsWindow::UpdateOpaqueRegion(const LayoutDeviceIntRegion& aRegion) {
+void nsWindow::UpdateOpaqueRegion(const LayoutDeviceIntRegion& aRegion,
+                                  const LayoutDeviceIntRegion&) {
   {
     AutoReadLock r(mOpaqueRegionLock);
     if (mOpaqueRegion == aRegion) {

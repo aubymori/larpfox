@@ -1978,6 +1978,7 @@ void nsDisplayListBuilder::AddSizeOfExcludingThis(nsWindowSizes& aSizes) const {
   n += mRetainedWindowDraggingRegion.SizeOfExcludingThis(mallocSizeOf);
   n += mRetainedWindowNoDraggingRegion.SizeOfExcludingThis(mallocSizeOf);
   n += mRetainedWindowOpaqueRegion.SizeOfExcludingThis(mallocSizeOf);
+  n += mWindowExcludeGlassRegion.SizeOfExcludingThis(mallocSizeOf);
   // XXX can't measure mClipDeduplicator since it uses std::unordered_set.
 
   aSizes.mLayoutRetainedDisplayListSize += n;
@@ -2042,12 +2043,14 @@ void nsDisplayListBuilder::RemoveModifiedWindowRegions() {
   mRetainedWindowDraggingRegion.RemoveModifiedFramesAndRects();
   mRetainedWindowNoDraggingRegion.RemoveModifiedFramesAndRects();
   mRetainedWindowOpaqueRegion.RemoveModifiedFramesAndRects();
+  mWindowExcludeGlassRegion.RemoveModifiedFramesAndRects();
 }
 
 void nsDisplayListBuilder::ClearRetainedWindowRegions() {
   mRetainedWindowDraggingRegion.Clear();
   mRetainedWindowNoDraggingRegion.Clear();
   mRetainedWindowOpaqueRegion.Clear();
+  mWindowExcludeGlassRegion.Clear();
 }
 
 void nsDisplayListBuilder::EnterSVGEffectsContents(
@@ -3173,6 +3176,16 @@ static void DealWithWindowsAppearanceHacks(nsIFrame* aFrame,
     return;
   }
 
+  if (defaultAppearance == StyleAppearance::MozWinExcludeGlass) {
+    bool preservesAxisAlignedRectangles = false;
+    nsRect bounds = nsLayoutUtils::TransformFrameRectToAncestor(
+        aFrame, aFrame->GetRectRelativeToSelf(), aBuilder->RootReferenceFrame(),
+        &preservesAxisAlignedRectangles);
+    if (preservesAxisAlignedRectangles) {
+      aBuilder->AddWindowExcludeGlassRegion(aFrame, bounds);
+    }
+  }
+
   if (auto type = disp.GetWindowButtonType()) {
     if (auto* widget = aFrame->GetNearestWidget()) {
       auto rect = LayoutDevicePixel::FromAppUnitsToNearest(
@@ -3935,6 +3948,9 @@ nsRegion nsDisplayThemedBackground::GetOpaqueRegion(
 
 Maybe<nscolor> nsDisplayThemedBackground::IsUniform(
     nsDisplayListBuilder* aBuilder) const {
+  if (mAppearance == StyleAppearance::MozWinBorderlessGlass) {
+    return Some(NS_RGBA(0, 0, 0, 0));
+  }
   return Nothing();
 }
 

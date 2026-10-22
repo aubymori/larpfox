@@ -251,8 +251,21 @@ bool WebRenderLayerManager::BeginTransaction(const nsCString& aURL) {
   return true;
 }
 
+bool WebRenderLayerManager::WindowClipChanged() const {
+  const auto mask = mWidget->GetWindowButtonMask();
+  const auto insets = mWidget->GetClientContentInsets();
+  return mWindowButtonMask != mask || mClientContentInsets != insets ||
+         (insets != LayoutDeviceIntMargin() &&
+          mWindowClipSize != mWidget->GetClientSize());
+}
+
 bool WebRenderLayerManager::EndEmptyTransaction(EndTransactionFlags aFlags) {
   auto clearTarget = MakeScopeExit([&] { mTarget = nullptr; });
+
+  if (WindowClipChanged()) {
+    // The root mask belongs to the scene, not an invalid-region update.
+    return false;
+  }
 
   // If we haven't sent a display list (since creation or since the last time we
   // sent ClearDisplayList to the parent) then we can't do an empty transaction
@@ -375,6 +388,45 @@ void WebRenderLayerManager::EndTransactionWithoutLayer(
     diplayListBuilder->DumpSerializedDisplayList();
   }
 
+  const auto windowButtonMask = mWidget->GetWindowButtonMask();
+  const auto clientContentInsets = mWidget->GetClientContentInsets();
+  AutoTArray<wr::WrClipId, 2> clips;
+  if (clientContentInsets != LayoutDeviceIntMargin()) {
+    LayoutDeviceIntRect visibleBounds(LayoutDeviceIntPoint(), size);
+    visibleBounds.Deflate(clientContentInsets);
+    clips.AppendElement(diplayListBuilder->DefineRectClip(
+        Nothing(), wr::ToLayoutRect(LayoutDeviceRect(visibleBounds))));
+  }
+  if (windowButtonMask) {
+    wr::ComplexClipRegion exclusion{};
+    exclusion.rect =
+        wr::ToLayoutRect(LayoutDeviceRect(windowButtonMask->mRect));
+    exclusion.radii = wr::ToBorderRadius(
+        LayoutDeviceSize(), LayoutDeviceSize(),
+        LayoutDeviceSize(windowButtonMask->mBottomLeftRadius,
+                         windowButtonMask->mBottomLeftRadius),
+        LayoutDeviceSize(windowButtonMask->mBottomRightRadius,
+                         windowButtonMask->mBottomRightRadius));
+    exclusion.mode = wr::ClipMode::ClipOut;
+    clips.AppendElement(
+        diplayListBuilder->DefineRoundedRectClip(Nothing(), exclusion));
+  }
+  Maybe<wr::WrSpatialId> rootReferenceFrame;
+  if (!clips.IsEmpty()) {
+    const auto chain = diplayListBuilder->DefineClipChain(
+        clips, diplayListBuilder->CurrentClipChainIdIfNotRoot());
+    wr::StackingContextParams params;
+    params.clip = wr::WrStackingContextClip::ClipChain(chain.id);
+    // A complex clip-out on this enclosing stacking context is rasterized into
+    // alpha, including on native/layer compositors. It cannot be promoted to a
+    // rectangular native-surface clip or bypassed by browser backgrounds.
+    rootReferenceFrame = diplayListBuilder->PushStackingContext(
+        params,
+        wr::ToLayoutRect(
+            LayoutDeviceRect(LayoutDevicePoint(), LayoutDeviceSize(size))),
+        wr::RasterSpace::Screen());
+  }
+
   if (aDisplayList) {
     MOZ_ASSERT(aDisplayListBuilder && !aBackground);
 
@@ -395,6 +447,15 @@ void WebRenderLayerManager::EndTransactionWithoutLayer(
       builderDumpIndex = diplayListBuilder->Dump(
           /*indent*/ 1, Some(builderDumpIndex), Nothing());
     }
+  }
+
+  if (!clips.IsEmpty()) {
+    diplayListBuilder->PopStackingContext(rootReferenceFrame.isSome());
+  }
+  if (!aRenderOffscreen) {
+    mWindowButtonMask = windowButtonMask;
+    mWindowClipSize = size;
+    mClientContentInsets = clientContentInsets;
   }
 
   if (AsyncPanZoomEnabled()) {

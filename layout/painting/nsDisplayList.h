@@ -1552,6 +1552,15 @@ class nsDisplayListBuilder {
                                     : mWindowOpaqueRegion;
   }
 
+  // Limit glass margins to explicitly excluded opaque areas.
+  void AddWindowExcludeGlassRegion(nsIFrame* aFrame, const nsRect& aBounds) {
+    mWindowExcludeGlassRegion.Add(aFrame, aBounds);
+  }
+
+  nsRegion GetWindowExcludeGlassRegion() const {
+    return mWindowExcludeGlassRegion.ToRegion();
+  }
+
   StackingContextBits GetStackingContextBits() const {
     return mStackingContextBits;
   }
@@ -1876,6 +1885,7 @@ class nsDisplayListBuilder {
 
   // Window opaque region is calculated during layer building.
   WeakFrameRegion mRetainedWindowOpaqueRegion;
+  WeakFrameRegion mWindowExcludeGlassRegion;
 
   std::unordered_set<const DisplayItemClipChain*, DisplayItemClipChainHasher,
                      DisplayItemClipChainEqualer>

@@ -64,6 +64,7 @@ class nsUXThemeData {
 
   static ThemeHandle sThemes[eUXNumClasses];
   static SIZE sCommandButtonMetrics[CMDBUTTONIDX_BUTTONBOX];
+  static mozilla::Maybe<SIZE> sCommandButtonBoxMetrics;
   static bool sCommandButtonMetricsInitialized;
   static bool sTitlebarInfoPopulated;
   static bool sNativeThemeInfoInitialized;

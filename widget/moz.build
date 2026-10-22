@@ -234,6 +234,7 @@ EXPORTS.mozilla.widget += [
     "WebCustomFormatUtils.h",
     "WidgetLogging.h",
     "WidgetMessageUtils.h",
+    "WindowButtonMask.h",
     "WindowOcclusionState.h",
 ]
 

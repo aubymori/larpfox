@@ -284,6 +284,14 @@ class nsWindow final : public nsIWidget {
   TextEventDispatcherListener* GetNativeTextEventDispatcherListener() override;
   void SetTransparencyMode(TransparencyMode aMode) override;
   TransparencyMode GetTransparencyMode() override { return mTransparencyMode; }
+  bool HasGlass() const {
+    return mTransparencyMode == TransparencyMode::BorderlessGlass;
+  }
+  bool UsesNativeCaptionButtons() const;
+  LayoutDeviceIntMargin GetClientContentInsets() const override;
+  void UpdateThemeGeometries(const nsTArray<ThemeGeometry>&) override;
+  mozilla::Maybe<mozilla::widget::WindowButtonMask> GetWindowButtonMask()
+      const override;
   void SetCustomTitlebar(bool) override;
   void SetResizeMargin(mozilla::LayoutDeviceIntCoord aResizeMargin) override;
   void UpdateWindowDraggingRegion(
@@ -636,14 +644,19 @@ class nsWindow final : public nsIWidget {
   bool IsSimulatedClientArea(int32_t clientX, int32_t clientY);
   bool IsWindowButton(int32_t hitTestResult);
 
-  void UpdateOpaqueRegion(const LayoutDeviceIntRegion&) override;
+  void UpdateOpaqueRegion(const LayoutDeviceIntRegion&,
+                          const LayoutDeviceIntRegion&) override;
   void UpdateOpaqueRegionInternal();
   LayoutDeviceIntRegion GetOpaqueRegionForTesting() const override {
-    return mOpaqueRegion;
+    return GetEffectiveOpaqueRegion();
   }
   // Gets the translucent region, in client coordinates.
   LayoutDeviceIntRegion GetTranslucentRegion();
+  const LayoutDeviceIntRegion& GetEffectiveOpaqueRegion() const;
   void MaybeInvalidateTranslucentRegion();
+  void RefreshGlassCapability();
+  void UpdateNativeCaptionGeometry();
+  void UpdateWindowButtonMask();
 
   void SetColorScheme(const mozilla::Maybe<mozilla::ColorScheme>&) override;
   void SetMicaBackdrop(bool) override;
@@ -860,6 +873,17 @@ class nsWindow final : public nsIWidget {
   // Opaque region maintained by UpdateOpaqueRegion (relative to the client
   // area).
   LayoutDeviceIntRegion mOpaqueRegion;
+  LayoutDeviceIntRegion mGlassOpaqueRegion;
+  LayoutDeviceIntSize mOpaqueRegionClientSize;
+  LayoutDeviceIntRegion mEffectiveOpaqueRegion;
+  mozilla::Maybe<mozilla::widget::WindowButtonMask> mWindowButtonMask;
+  mozilla::Maybe<LayoutDeviceIntRect> mNativeCaptionButtonRect;
+  mozilla::Maybe<LayoutDeviceIntRect> mWindowButtonBoxRect;
+  bool mNativeCaptionButtonsOnLeft = false;
+  // Capability is refreshed on mode/theme/composition changes, not painting.
+  bool mGlassCompositionEnabled = false;
+  bool mGlassWindowThemeAvailable = false;
+  bool mGlassFramePolicyEnabled = false;
 
   LayoutDeviceIntRect mBounds;
 
@@ -946,7 +970,7 @@ class nsWindow final : public nsIWidget {
   // Client rect for minimize, maximize and close buttons.
   mozilla::EnumeratedArray<WindowButtonType, LayoutDeviceIntRect,
                            size_t(WindowButtonType::Count)>
-      mWindowBtnRect;
+      mWindowBtnRect, mNativeWindowBtnRect;
 
   nsString mDesktopId MOZ_GUARDED_BY(mozilla::sMainThreadCapability);
 
