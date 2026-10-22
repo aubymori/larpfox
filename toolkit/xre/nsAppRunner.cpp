@@ -66,9 +66,7 @@
 #  include "MacApplicationDelegate.h"
 #  include "MacAutoreleasePool.h"
 #  include "MacRunFromDmgUtils.h"
-#  ifdef NIGHTLY_BUILD
-#    include "ASWebAuthSessionHandler.h"
-#  endif
+#  include "ASWebAuthSessionHandler.h"
 // these are needed for sysctl
 #  include <sys/types.h>
 #  include <sys/sysctl.h>
@@ -3141,7 +3139,7 @@ static ReturnAbortOnError ShowProfileSelector(
 // hands an ASWebAuthenticationSession request to the process it launched rather
 // than to the relaunched one, so showing a dialog would drop the request.
 static bool ShouldSkipProfileDialogForWebAuth() {
-#if defined(XP_MACOSX) && defined(NIGHTLY_BUILD)
+#if defined(XP_MACOSX)
   return WasLaunchedByAuthenticationServices();
 #else
   return false;
@@ -6427,7 +6425,7 @@ nsresult XREMain::XRE_mainRun() {
 #  endif
 #endif
 
-#if defined(XP_MACOSX) && defined(NIGHTLY_BUILD)
+#if defined(XP_MACOSX)
       RegisterASWebAuthSessionObservers();
 #endif
 

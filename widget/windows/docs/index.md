@@ -25,6 +25,11 @@ chrome themes; the default browser UI does not enable it.
 invalidate these caches in both parent and content processes. Controls fall back
 to classic GDI drawing when their visual-style theme is unavailable.
 
+`gfxWindowsNativeDrawing` bridges GDI painting into the graphics draw targets.
+Its alpha-recovery helpers preserve transparency when controls are composited,
+scaled, or transformed. The bridge and its scalar and SIMD recovery sources
+are required Windows graphics build dependencies for the native theme.
+
 Light controls use the Windows palette. Dark form controls use the existing
 non-native renderer and dark system colors, including its sizing and focus
 indicators. Explicit author colors and CSS-only form-control styling remain

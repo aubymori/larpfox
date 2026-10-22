@@ -11,7 +11,6 @@
 #include "WinUtils.h"
 #include "WindowsUIUtils.h"
 #include "mozilla/FontPropertyTypes.h"
-#include "mozilla/glean/WidgetWindowsMetrics.h"
 #include "mozilla/intl/LocaleService.h"
 #include "mozilla/widget/WinRegistry.h"
 #include "nsStyleConsts.h"
@@ -64,13 +63,8 @@ uint32_t nsLookAndFeel::SystemColorFilter() {
   return key.GetValueAsDword(u"FilterType"_ns).valueOr(0);
 }
 
-nsLookAndFeel::nsLookAndFeel() {
-  glean::widget::touch_enabled_device
-      .EnumGet(static_cast<glean::widget::TouchEnabledDeviceLabel>(
-          WinUtils::IsTouchDeviceSupportPresent()))
-      .Add();
-}
-
+// {Con/De}structor in .cpp as mColorFilterWatcher needs KeyWatcher definition
+nsLookAndFeel::nsLookAndFeel() = default;
 nsLookAndFeel::~nsLookAndFeel() { nsUXThemeData::Invalidate(); }
 
 void nsLookAndFeel::NativeInit() { EnsureInit(); }
